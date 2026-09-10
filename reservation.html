@@ -250,6 +250,34 @@
         background: white;
         color: var(--toms-orange);
         font-weight: bold;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .qty-input {
+        width: 48px;
+        height: 30px;
+        text-align: center;
+        font-weight: bold;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 2px 4px;
+        font-size: 0.9rem;
+      }
+      .qty-input:focus {
+        border-color: var(--toms-orange);
+        outline: none;
+        box-shadow: 0 0 0 0.2rem rgba(255, 107, 0, 0.25);
+      }
+      /* Remove number input spinner arrows */
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type=number] {
+        -moz-appearance: textfield;
       }
 
       /* TOGGLE SWITCH */
@@ -427,9 +455,13 @@
                       id="resPax"
                       class="form-control fw-bold"
                       min="1"
+                      max="15"
                       value="2"
                       required
                     />
+                    <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
+                      <i class="fa-solid fa-circle-info text-warning me-1"></i> Maximum 15 guests per reservation.
+                    </small>
                   </div>
 
                   <div class="col-12">
@@ -1222,7 +1254,14 @@
 
       document.getElementById("resTime").addEventListener("change", syncReservationSummary);
 
-      document.getElementById("resPax").addEventListener("input", () => {
+      document.getElementById("resPax").addEventListener("input", function () {
+        let val = parseInt(this.value);
+        if (val > 15) {
+          this.value = 15;
+          showReservationError("Maximum allowed party size is 15 guests.");
+        } else if (val < 1 && this.value !== "") {
+          this.value = 1;
+        }
         selectedTable = null;
         document.getElementById("resTableSize").value = "";
         document.getElementById("confirmTableBtn").disabled = true;
@@ -1400,7 +1439,7 @@
                     </div>
                     <div class="d-flex align-items-center">
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                      <span class="fw-bold mx-2" style="width: 20px; text-align:center;" id="qty_${uniqueID}">0</span>
+                      <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                     </div>
                   </div>
@@ -1464,7 +1503,7 @@
                       </div>
                       <div class="d-flex align-items-center">
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                        <span class="fw-bold mx-2" style="width: 20px; text-align:center;" id="qty_${uniqueID}">0</span>
+                        <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                       </div>
                     </div>
@@ -1562,12 +1601,36 @@
 
         let newQty = advanceCart[id].qty + change;
         if (newQty < 0) newQty = 0;
+        if (newQty > 99) newQty = 99;
 
         advanceCart[id].qty = newQty;
         const qtyEl = document.getElementById(`qty_${id}`);
-        if (qtyEl) qtyEl.innerText = newQty;
+        if (qtyEl) qtyEl.value = newQty;
 
         if (newQty === 0) delete advanceCart[id];
+
+        let total = 0;
+        for (let item in advanceCart) {
+          total += advanceCart[item].price * advanceCart[item].qty;
+        }
+        document.getElementById("cartTotal").innerText = total.toFixed(2);
+        syncReservationSummary();
+      };
+
+      window.setCartQty = function (id, val) {
+        let num = parseInt(val);
+        if (isNaN(num) || num < 0) num = 0;
+        if (num > 99) num = 99;
+
+        if (!advanceCart[id]) {
+          advanceCart[id] = { ...currentMenuData[id], qty: 0 };
+        }
+
+        advanceCart[id].qty = num;
+        const qtyEl = document.getElementById(`qty_${id}`);
+        if (qtyEl && qtyEl.value != num) qtyEl.value = num;
+
+        if (num === 0) delete advanceCart[id];
 
         let total = 0;
         for (let item in advanceCart) {
@@ -1618,6 +1681,12 @@
 
           if (!document.getElementById("resTableSize").value) {
             showReservationError("Please select a table from the map before proceeding.");
+            return;
+          }
+
+          const paxCount = parseInt(document.getElementById("resPax").value);
+          if (isNaN(paxCount) || paxCount < 1 || paxCount > 15) {
+            showReservationError("Party size must be between 1 and 15 guests.");
             return;
           }
 

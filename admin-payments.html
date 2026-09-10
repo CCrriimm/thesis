@@ -155,7 +155,10 @@
               </div>
             </div>
             <h4 id="modalCustomerName" class="fw-bold mb-1"></h4>
-            <h4 id="modalAmount" class="fw-bold text-success"></h4>
+            <h4 id="modalAmount" class="fw-bold text-success mb-2"></h4>
+            <div id="modalReasonWrap" class="d-none alert alert-danger py-2 px-3 small fw-bold text-start mb-0">
+              <i class="fa-solid fa-circle-exclamation me-1"></i> <span id="modalReasonText"></span>
+            </div>
           </div>
           <div class="modal-footer justify-content-center" id="modalActions">
             <button type="button" id="rejectBtn" class="btn btn-danger px-4 fw-bold">Reject</button>
@@ -165,8 +168,76 @@
       </div>
     </div>
 
+    <!-- Reject Payment Modal with 5 Common Reasons + Others -->
+    <div class="modal fade" id="rejectPaymentModal" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 overflow-hidden shadow-lg">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i> Reject & Cancel Payment</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <p class="text-muted small mb-3">Please select the reason for rejecting this payment/booking. The customer will see this explanation on their order/reservation status.</p>
+            
+            <div id="rejectErrorAlert" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3"></div>
+
+            <label class="form-label fw-bold small text-dark">Reason for Rejection:</label>
+            <div class="space-y-2 mb-3">
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReason1" value="Invalid GCash Reference or Amount Mismatch" checked>
+                <label class="form-check-label fw-bold small" for="rejReason1">
+                  1. Invalid GCash Reference or Amount Mismatch
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReason2" value="Unclear / Blurry / Tampered Receipt Upload">
+                <label class="form-check-label fw-bold small" for="rejReason2">
+                  2. Unclear / Blurry / Tampered Receipt Upload
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReason3" value="Requested Slot / Table Already Fully Booked">
+                <label class="form-check-label fw-bold small" for="rejReason3">
+                  3. Requested Slot / Table Already Fully Booked
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReason4" value="Item / Flavor Out of Stock or Kitchen at Max Capacity">
+                <label class="form-check-label fw-bold small" for="rejReason4">
+                  4. Item / Flavor Out of Stock or Kitchen at Max Capacity
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReason5" value="Customer Requested Cancellation / Duplicate Order">
+                <label class="form-check-label fw-bold small" for="rejReason5">
+                  5. Customer Requested Cancellation / Duplicate Order
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="rejectionReasonRadio" id="rejReasonOther" value="Others">
+                <label class="form-check-label fw-bold small" for="rejReasonOther">
+                  6. Others (Please specify below)
+                </label>
+              </div>
+            </div>
+
+            <div id="customReasonWrap" class="d-none mt-2">
+              <label class="form-label fw-bold small text-muted">Specify Reason:</label>
+              <textarea id="customReasonText" class="form-control" rows="3" placeholder="Type specific explanation for rejection..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer justify-content-end bg-white border-top">
+            <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Back</button>
+            <button type="button" id="confirmRejectBtn" class="btn btn-danger px-4 fw-bold">
+              <i class="fa-solid fa-circle-xmark me-1"></i> Confirm Rejection
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
-      import { auth, db, ref, get, onAuthStateChanged, onValue, update, signOut } from "./js/firebase-config.js";
+      import { auth, db, ref, get, onAuthStateChanged, onValue, update, remove, signOut } from "./js/firebase-config.js";
 
       let receiptModalInstance = null;
       function getReceiptModal() {
@@ -196,9 +267,10 @@
       });
 
       const paymentsRef = ref(db, "payments");
-      onValue(paymentsRef, (snapshot) => {
+      onValue(paymentsRef, async (snapshot) => {
         allPayments = [];
         if (snapshot.exists()) {
+          const paymentsToSync = [];
           snapshot.forEach((child) => {
             const data = child.val();
             const dateObj = new Date(data.timestamp || Date.now());
@@ -207,9 +279,63 @@
               ...data,
               rawTime: data.timestamp || 0,
               formattedDate: dateObj.toLocaleDateString(),
-              formattedTime: dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              formattedTime: dateObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
             });
+
+            if (data.status === "pending") {
+              paymentsToSync.push({ id: child.key, ...data });
+            }
           });
+
+          // Self-healing auto-sync: if linked reservation or order was already cancelled, sync payment status immediately
+          if (paymentsToSync.length > 0) {
+            for (const p of paymentsToSync) {
+              const resId = p.reservationId || (p.category === "Online Reservation" ? p.id : null);
+              const orderId = p.orderId || (p.category === "Online Order" ? p.id : null);
+
+              if (resId) {
+                try {
+                  const resSnap = await get(ref(db, "reservations/" + resId));
+                  if (resSnap.exists()) {
+                    const resData = resSnap.val();
+                    if (resData.status === "cancelled" || resData.status === "rejected") {
+                      const finalReason = resData.rejectionReason || resData.cancellationReason || "Cancelled";
+                      await update(ref(db, "payments/" + p.id), {
+                        status: "cancelled",
+                        rejectionReason: finalReason,
+                        cancellationReason: finalReason,
+                        cancelledBy: resData.cancelledBy || "customer",
+                        cancelledAt: resData.cancelledAt || Date.now()
+                      });
+                    }
+                  }
+                } catch (e) {
+                  console.warn("Auto-sync reservation check error:", e);
+                }
+              }
+
+              if (orderId) {
+                try {
+                  const orderSnap = await get(ref(db, "orders/" + orderId));
+                  if (orderSnap.exists()) {
+                    const orderData = orderSnap.val();
+                    if (orderData.status === "cancelled" || orderData.status === "rejected") {
+                      const finalReason = orderData.rejectionReason || orderData.cancellationReason || "Cancelled";
+                      await update(ref(db, "payments/" + p.id), {
+                        status: "cancelled",
+                        rejectionReason: finalReason,
+                        cancellationReason: finalReason,
+                        cancelledBy: orderData.cancelledBy || "customer",
+                        cancelledAt: orderData.cancelledAt || Date.now()
+                      });
+                    }
+                  }
+                } catch (e) {
+                  console.warn("Auto-sync order check error:", e);
+                }
+              }
+            }
+          }
         }
         renderTable();
       });
@@ -233,7 +359,14 @@
           let statusBadge = "";
           if (p.status === "pending") statusBadge = '<span class="badge bg-warning text-dark">Pending</span>';
           else if (p.status === "approved") statusBadge = '<span class="badge bg-success">Approved</span>';
+          else if (p.status === "cancelled") statusBadge = '<span class="badge bg-danger">Cancelled</span>';
           else statusBadge = '<span class="badge bg-danger">Rejected</span>';
+
+          let reasonSnippet = "";
+          if ((p.status === "cancelled" || p.status === "rejected") && (p.rejectionReason || p.cancellationReason)) {
+            const label = p.status === "cancelled" ? (p.cancelledBy === "customer" ? "Customer: " : "Admin: ") : "Reason: ";
+            reasonSnippet = `<br><small class="text-danger fw-bold" style="font-size:0.75rem;"><i class="fa-solid fa-circle-exclamation me-1"></i>${label}${p.rejectionReason || p.cancellationReason}</small>`;
+          }
 
           let catBadge = "";
           if (p.category === "Online Reservation") catBadge = '<span class="badge bg-primary">Reservation</span>';
@@ -253,7 +386,7 @@
               <td>${catBadge}</td>
               <td><small class="fw-bold">${p.formattedDate}</small><br><small class="text-muted">${p.formattedTime}</small></td>
               <td class="fw-bold text-success">₱${p.amount}</td>
-              <td>${statusBadge}</td>
+              <td>${statusBadge}${reasonSnippet}</td>
               <td>${actionBtn}</td>
             </tr>
           `;
@@ -285,8 +418,8 @@
 
       function openReceiptModal(p, isHistory) {
         currentPaymentId = p.id;
-        currentResId = p.reservationId || "";
-        currentOrderId = p.orderId || "";
+        currentResId = p.reservationId || (p.category === "Online Reservation" ? p.id : "");
+        currentOrderId = p.orderId || (p.category === "Online Order" ? p.id : "");
 
         document.getElementById("modalCustomerName").innerText = "Customer: " + (p.customerName || "N/A");
         document.getElementById("modalAmount").innerText = "Amount: ₱" + (p.amount || "0.00");
@@ -312,7 +445,20 @@
           if (viewFullBtn) viewFullBtn.classList.add("d-none");
         }
 
-        if (isHistory) {
+        const reasonWrap = document.getElementById("modalReasonWrap");
+        const reasonText = document.getElementById("modalReasonText");
+        const reasonVal = p.rejectionReason || p.cancellationReason;
+        if (reasonVal) {
+          const reasonTitle = p.status === "cancelled"
+            ? (p.cancelledBy === "customer" ? "Customer Cancellation Reason: " : "Admin Cancellation Reason: ")
+            : "Rejection Reason: ";
+          reasonText.innerText = reasonTitle + reasonVal;
+          reasonWrap.classList.remove("d-none");
+        } else {
+          reasonWrap.classList.add("d-none");
+        }
+
+        if (isHistory || p.status === "cancelled" || p.status === "rejected") {
           document.getElementById("modalActions").classList.add("d-none");
         } else {
           document.getElementById("modalActions").classList.remove("d-none");
@@ -354,20 +500,116 @@
         if (modal) modal.hide();
       });
 
-      // REJECT BUTTON
-      document.getElementById("rejectBtn").addEventListener("click", async () => {
-        await update(ref(db, "payments/" + currentPaymentId), { status: "rejected" });
-
-        if (currentResId && currentResId !== "") {
-          await update(ref(db, "reservations/" + currentResId), { status: "cancelled" });
-        } else if (currentOrderId && currentOrderId !== "") {
-          await update(ref(db, "orders/" + currentOrderId), { 
-            status: "cancelled",
-            paymentStatus: "rejected"
-          });
+      // REJECT BUTTON - Opens Reason Modal
+      let rejectModalInstance = null;
+      function getRejectModal() {
+        if (!rejectModalInstance) {
+          const el = document.getElementById("rejectPaymentModal");
+          if (el && window.bootstrap) rejectModalInstance = new bootstrap.Modal(el);
         }
+        return rejectModalInstance;
+      }
+
+      // Handle custom reason toggle
+      document.querySelectorAll('input[name="rejectionReasonRadio"]').forEach((radio) => {
+        radio.addEventListener("change", (e) => {
+          const customWrap = document.getElementById("customReasonWrap");
+          if (e.target.value === "Others") {
+            customWrap.classList.remove("d-none");
+            document.getElementById("customReasonText").focus();
+          } else {
+            customWrap.classList.add("d-none");
+          }
+        });
+      });
+
+      document.getElementById("rejectBtn").addEventListener("click", () => {
         const modal = getReceiptModal();
         if (modal) modal.hide();
+
+        const errAlert = document.getElementById("rejectErrorAlert");
+        if (errAlert) errAlert.classList.add("d-none");
+        document.getElementById("customReasonWrap").classList.add("d-none");
+        document.getElementById("customReasonText").value = "";
+        document.getElementById("rejReason1").checked = true;
+
+        const rejModal = getRejectModal();
+        if (rejModal) rejModal.show();
+      });
+
+      // CONFIRM REJECTION BUTTON
+      document.getElementById("confirmRejectBtn").addEventListener("click", async () => {
+        const errAlert = document.getElementById("rejectErrorAlert");
+        if (errAlert) errAlert.classList.add("d-none");
+
+        const selectedRadio = document.querySelector('input[name="rejectionReasonRadio"]:checked');
+        let finalReason = selectedRadio ? selectedRadio.value : "Payment Rejected";
+
+        if (finalReason === "Others") {
+          const customText = (document.getElementById("customReasonText").value || "").trim();
+          if (!customText) {
+            if (errAlert) {
+              errAlert.innerText = "Please specify the custom rejection reason.";
+              errAlert.classList.remove("d-none");
+            }
+            return;
+          }
+          finalReason = customText;
+        }
+
+        const btn = document.getElementById("confirmRejectBtn");
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Rejecting...';
+        btn.disabled = true;
+
+        try {
+          await update(ref(db, "payments/" + currentPaymentId), { 
+            status: "rejected",
+            rejectionReason: finalReason,
+            rejectedAt: Date.now()
+          });
+
+          if (currentResId && currentResId !== "") {
+            // Fetch reservation details to free up table slot if applicable
+            const resSnap = await get(ref(db, "reservations/" + currentResId));
+            if (resSnap.exists()) {
+              const resData = resSnap.val();
+              if (resData.date && resData.time && resData.tableSize) {
+                const tableMatch = resData.tableSize.match(/Table (\d+)/);
+                if (tableMatch) {
+                  const tableId = tableMatch[1];
+                  await remove(ref(db, `reservationSlots/${resData.date}/${resData.time}/tables/${tableId}`));
+                }
+              }
+            }
+
+            await update(ref(db, "reservations/" + currentResId), { 
+              status: "cancelled",
+              rejectionReason: finalReason,
+              cancelledBy: "admin",
+              cancelledAt: Date.now()
+            });
+          } else if (currentOrderId && currentOrderId !== "") {
+            await update(ref(db, "orders/" + currentOrderId), { 
+              status: "cancelled",
+              paymentStatus: "rejected",
+              rejectionReason: finalReason,
+              cancelledBy: "admin",
+              cancelledAt: Date.now()
+            });
+          }
+
+          const rejModal = getRejectModal();
+          if (rejModal) rejModal.hide();
+        } catch (error) {
+          console.error("Error rejecting payment:", error);
+          if (errAlert) {
+            errAlert.innerText = "Error rejecting: " + (error.message || "Please try again.");
+            errAlert.classList.remove("d-none");
+          }
+        } finally {
+          btn.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i> Confirm Rejection';
+          btn.disabled = false;
+        }
       });
 
       document.getElementById("adminLogoutBtn").addEventListener("click", () => {

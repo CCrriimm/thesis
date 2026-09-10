@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
-import { getDatabase, ref , push, onValue, set, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref , push, onValue, set, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { 
     getAuth, 
     signInWithEmailAndPassword, 
@@ -47,6 +47,7 @@ export {
     set, 
     get, 
     update, 
+    remove, 
     signInWithEmailAndPassword, 
     signOut, 
     onAuthStateChanged, 

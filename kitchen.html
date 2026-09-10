@@ -285,6 +285,7 @@
             <p class="fs-5 fw-bold mb-0" id="confirmActionText">
               Are you sure?
             </p>
+            <div id="kitchenActionError" class="alert alert-danger d-none py-2 px-3 small fw-bold mt-3 mb-0"></div>
           </div>
           <div class="modal-footer justify-content-center">
             <button
@@ -331,32 +332,51 @@
 
       setInterval(() => {
         document.getElementById("liveClock").innerText =
-          new Date().toLocaleTimeString();
+          new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
       }, 1000);
 
       let activeOrders = [];
       let activeReservations = [];
       let activeRefills = [];
 
+      // Helper to parse any time string ("14:30", "2:30 PM", "8:00 AM - 11:00 AM") into hours and minutes
+      function parseTimeTo24(timeStr) {
+        if (!timeStr) return { hours: 0, minutes: 0 };
+        let clean = timeStr.trim();
+        if (clean.includes(" - ")) {
+          clean = clean.split(" - ")[0].trim();
+        }
+        const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+        if (match) {
+          let h = parseInt(match[1], 10);
+          const m = parseInt(match[2], 10);
+          const mer = match[3] ? match[3].toUpperCase() : null;
+          if (mer === "PM" && h < 12) h += 12;
+          if (mer === "AM" && h === 12) h = 0;
+          return { hours: h, minutes: m };
+        }
+        return { hours: 0, minutes: 0 };
+      }
+
+      // Helper to format any time string cleanly to 12-hour format
+      function formatTo12Hour(timeStr) {
+        if (!timeStr) return "";
+        if (timeStr.includes("AM") || timeStr.includes("PM")) return timeStr;
+        const { hours, minutes } = parseTimeTo24(timeStr);
+        const ampm = hours >= 12 ? "PM" : "AM";
+        const h12 = hours % 12 || 12;
+        const minPadded = minutes.toString().padStart(2, "0");
+        return `${h12}:${minPadded} ${ampm}`;
+      }
+
       // Function to check if time is within 1 hour before the scheduled time
       function isWithinOneHourBefore(dateStr, timeStr) {
         if (!dateStr || !timeStr) return false;
 
         let now = new Date();
-
-        // Parse the time string (supports both "HH:MM" and "8:00 AM - 11:00 AM" formats)
-        let targetTime = timeStr;
-        if (timeStr.includes(" - ")) {
-          targetTime = timeStr.split(" - ")[0]; // Take the start time
-        }
-
-        let resTime = new Date(dateStr + "T" + targetTime);
-
-        // If the date is invalid, try parsing differently
-        if (isNaN(resTime.getTime())) {
-          // Try parsing with timezone
-          resTime = new Date(dateStr + " " + targetTime);
-        }
+        let { hours, minutes } = parseTimeTo24(timeStr);
+        let resTime = new Date(dateStr);
+        resTime.setHours(hours, minutes, 0, 0);
 
         if (isNaN(resTime.getTime())) return false;
 
@@ -366,14 +386,14 @@
         return diffInMinutes <= 60 && diffInMinutes >= -120;
       }
 
-      // For online orders with pickupTime (format like "14:30")
+      // For online orders with pickupTime (supports "14:30" or "2:30 PM")
       function isOrderWithinOneHourBefore(pickupTimeStr) {
         if (!pickupTimeStr) return false;
 
         let now = new Date();
-        let [hours, minutes] = pickupTimeStr.split(":");
+        let { hours, minutes } = parseTimeTo24(pickupTimeStr);
         let orderTime = new Date();
-        orderTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+        orderTime.setHours(hours, minutes, 0, 0);
 
         let diffInMinutes = (orderTime - now) / (1000 * 60);
 
@@ -517,7 +537,7 @@
                       <span class="badge mb-1" style="background-color: #ff9800; color: #000;">Table Refill</span><br>
                       <small class="fw-bold ticket-customer">Table ${ticket.tableNum}</small>
                     </div>
-                    <div class="ticket-time" style="color: #ff9800;">${new Date(ticket.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                    <div class="ticket-time" style="color: #ff9800;">${new Date(ticket.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</div>
                   </div>
                   <div class="ticket-items">${ticket.items.replace(/, /g, "<br>")}</div>
                   ${actionBtn}
@@ -533,7 +553,7 @@
                       <span class="badge bg-primary mb-1">Pickup Order</span><br>
                       <small class="fw-bold ticket-customer">${ticket.customerName}</small>
                     </div>
-                    <div class="ticket-time text-primary">${ticket.pickupTime}</div>
+                    <div class="ticket-time text-primary">${formatTo12Hour(ticket.pickupTime)}</div>
                   </div>
                   <div class="ticket-items">${ticket.items.replace(/, /g, "<br>")}</div>
                   <div class="countdown-timer text-center mb-2" id="countdown_${ticket.id}">Loading...</div>
@@ -543,9 +563,12 @@
             `;
           } else {
             // Calculate display time for reservation
-            let displayTime = ticket.time;
-            if (displayTime && displayTime.includes(" - ")) {
-              displayTime = displayTime.split(" - ")[0];
+            let displayTime = ticket.time || "";
+            if (displayTime.includes(" - ")) {
+              const [startT, endT] = displayTime.split(" - ");
+              displayTime = `${formatTo12Hour(startT)} - ${formatTo12Hour(endT)}`;
+            } else {
+              displayTime = formatTo12Hour(displayTime);
             }
 
             html = `
@@ -577,12 +600,10 @@
 
         activeReservations.forEach((res) => {
           const countdownEl = document.getElementById(`countdown_${res.id}`);
-          if (countdownEl) {
-            let targetTime = res.time;
-            if (targetTime && targetTime.includes(" - ")) {
-              targetTime = targetTime.split(" - ")[0];
-            }
-            const targetDate = new Date(res.date + "T" + targetTime);
+          if (countdownEl && res.time && res.date) {
+            const { hours, minutes } = parseTimeTo24(res.time);
+            const targetDate = new Date(res.date);
+            targetDate.setHours(hours, minutes, 0, 0);
             const diffMs = targetDate - now;
             if (diffMs > 0) {
               const minutesLeft = Math.floor(diffMs / (1000 * 60));
@@ -611,9 +632,9 @@
         activeOrders.forEach((order) => {
           const countdownEl = document.getElementById(`countdown_${order.id}`);
           if (countdownEl && order.pickupTime) {
-            const [hours, minutes] = order.pickupTime.split(":");
+            const { hours, minutes } = parseTimeTo24(order.pickupTime);
             const pickupDate = new Date();
-            pickupDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            pickupDate.setHours(hours, minutes, 0, 0);
             const diffMs = pickupDate - now;
             if (diffMs > 0) {
               const minutesLeft = Math.floor(diffMs / (1000 * 60));
@@ -647,6 +668,8 @@
       window.triggerAction = function (type, id, status, message) {
         pendingAction = { type: type, id: id, status: status };
         document.getElementById("confirmActionText").innerText = message;
+        const errEl = document.getElementById("kitchenActionError");
+        if (errEl) errEl.classList.add("d-none");
         confirmModal.show();
       };
 
@@ -654,6 +677,8 @@
         .getElementById("executeActionBtn")
         .addEventListener("click", async () => {
           if (!pendingAction) return;
+          const errEl = document.getElementById("kitchenActionError");
+          if (errEl) errEl.classList.add("d-none");
 
           const btn = document.getElementById("executeActionBtn");
           btn.innerHTML =
@@ -674,14 +699,17 @@
                 foodStatus: "served",
               });
             }
+            confirmModal.hide();
+            pendingAction = null;
           } catch (error) {
             console.error(error);
-            alert("Error updating order.");
+            if (errEl) {
+              errEl.innerText = "Error updating order. Please try again.";
+              errEl.classList.remove("d-none");
+            }
           } finally {
             btn.innerHTML = "Confirm";
             btn.disabled = false;
-            confirmModal.hide();
-            pendingAction = null;
           }
         });
 

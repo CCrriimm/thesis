@@ -145,6 +145,11 @@
       }
       .qty-btn { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--toms-orange); background: white; color: var(--toms-orange); font-weight: bold; line-height: 1; display: inline-flex; align-items: center; justify-content: center; transition: 0.15s; }
       .qty-btn:hover { background: var(--toms-orange); color: white; }
+      .qty-input { width: 48px; height: 30px; text-align: center; font-weight: bold; border: 1px solid #ced4da; border-radius: 6px; padding: 2px 4px; font-size: 0.9rem; }
+      .qty-input:focus { border-color: var(--toms-orange); outline: none; box-shadow: 0 0 0 0.2rem rgba(255, 107, 0, 0.25); }
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type=number] { -moz-appearance: textfield; }
       .form-check-input:checked { background-color: var(--toms-orange); border-color: var(--toms-orange); }
       #menuContainer::-webkit-scrollbar { width: 6px; }
       #menuContainer::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
@@ -257,7 +262,10 @@
                 </div>
                 <div class="col-md-6">
                   <label class="form-label fw-bold small text-muted">No. of People</label>
-                  <input type="number" id="resPax" class="form-control" min="1" value="2" required />
+                  <input type="number" id="resPax" class="form-control" min="1" max="15" value="2" required />
+                  <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
+                    <i class="fa-solid fa-circle-info text-warning me-1"></i> Maximum 15 guests per reservation.
+                  </small>
                 </div>
               </div>
 
@@ -358,6 +366,73 @@
       </div>
     </div>
 
+    <!-- Cancel / Reject Reservation Modal (5 Common Reasons + Others) -->
+    <div class="modal fade" id="cancelReservationModal" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 overflow-hidden shadow-lg">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title fw-bold"><i class="fa-solid fa-calendar-xmark me-2"></i> Cancel Reservation</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <p class="text-muted small mb-3">Please select the reason for cancelling this reservation. The occupied table slot will be released automatically.</p>
+            <div id="cancelErrorAlert" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3"></div>
+
+            <label class="form-label fw-bold small text-dark">Cancellation Reason:</label>
+            <div class="space-y-2 mb-3">
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason1" value="Guest No-Show / Late Arrival Past Grace Period" checked>
+                <label class="form-check-label fw-bold small" for="rcReason1">
+                  1. Guest No-Show / Late Arrival Past Grace Period
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason2" value="Customer Requested Cancellation / Schedule Change">
+                <label class="form-check-label fw-bold small" for="rcReason2">
+                  2. Customer Requested Cancellation / Schedule Change
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason3" value="Table / Floor Maintenance or Operational Issue">
+                <label class="form-check-label fw-bold small" for="rcReason3">
+                  3. Table / Floor Maintenance or Operational Issue
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason4" value="Invalid / Unverified Downpayment Receipt">
+                <label class="form-check-label fw-bold small" for="rcReason4">
+                  4. Invalid / Unverified Downpayment Receipt
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason5" value="Duplicate Booking / Incorrect Party Size or Floor">
+                <label class="form-check-label fw-bold small" for="rcReason5">
+                  5. Duplicate Booking / Incorrect Party Size or Floor
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReasonOther" value="Others">
+                <label class="form-check-label fw-bold small" for="rcReasonOther">
+                  6. Others (Please specify below)
+                </label>
+              </div>
+            </div>
+
+            <div id="resCustomReasonWrap" class="d-none mt-2">
+              <label class="form-label fw-bold small text-muted">Specify Custom Reason:</label>
+              <textarea id="resCustomReasonText" class="form-control" rows="3" placeholder="Type reason for cancelling this reservation..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer justify-content-end bg-white border-top">
+            <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Back</button>
+            <button type="button" id="confirmCancelResBtn" class="btn btn-danger px-4 fw-bold">
+              <i class="fa-solid fa-calendar-xmark me-1"></i> Confirm Cancellation
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Food Item Image Preview Modal (for Mobile & Click View) -->
     <div class="modal fade" id="foodImagePreviewModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
@@ -379,8 +454,8 @@
     </div>
 
     <script type="module">
-      // IMPORT `set` FOR RESERVATION SLOTS
-      import { auth, db, ref, get, onAuthStateChanged, onValue, update, push, set, signOut } from "./js/firebase-config.js";
+      // IMPORT `set` and `remove` FOR RESERVATION SLOTS
+      import { auth, db, ref, get, onAuthStateChanged, onValue, update, push, set, remove, signOut } from "./js/firebase-config.js";
 
       let currentView = "upcoming";
       let allRes = [];
@@ -445,12 +520,15 @@
           }
 
           let notesHTML = r.notes ? `<div class="order-note"><i class="fa-solid fa-utensils"></i> <b>Notes:</b><br>${r.notes}</div>` : "";
+          let reasonHTML = (r.status === "cancelled" && r.rejectionReason) 
+            ? `<div class="mt-1 p-1 bg-light border border-danger rounded text-danger small" style="font-size: 0.75rem;"><b>Reason:</b> ${r.rejectionReason}</div>` 
+            : "";
           tbody.innerHTML += `
             <tr>
               <td><span class="fw-bold fs-6">${r.name}</span><br>${typeBadge}</td>
               <td><span class="fw-bold">${r.date}</span><br><span class="text-muted"><i class="fa-regular fa-clock"></i> ${r.time}</span></td>
               <td><span class="fw-bold"><i class="fa-solid fa-users"></i> ${r.pax} People</span><br><small class="text-muted">Table: ${r.tableSize}</small><br>${notesHTML}</td>
-              <td>${statBadge}</td>
+              <td>${statBadge}${reasonHTML}</td>
               <td style="width: 120px;">${actions}</td>
             </tr>
           `;
@@ -464,16 +542,47 @@
         renderTable();
       };
 
-      let pendingResId = null, pendingResStatus = null, confirmActionModal = null;
-      window.addEventListener('DOMContentLoaded', () => { confirmActionModal = new bootstrap.Modal(document.getElementById('confirmActionModal')); });
+      let pendingResId = null, pendingResStatus = null, confirmActionModal = null, cancelReservationModal = null;
+      window.addEventListener('DOMContentLoaded', () => { 
+        confirmActionModal = new bootstrap.Modal(document.getElementById('confirmActionModal')); 
+        cancelReservationModal = new bootstrap.Modal(document.getElementById('cancelReservationModal'));
+      });
+
+      // Handle custom reason toggle in cancellation modal
+      document.querySelectorAll('input[name="resCancelReasonRadio"]').forEach((radio) => {
+        radio.addEventListener("change", (e) => {
+          const wrap = document.getElementById("resCustomReasonWrap");
+          if (e.target.value === "Others") {
+            wrap.classList.remove("d-none");
+            document.getElementById("resCustomReasonText").focus();
+          } else {
+            wrap.classList.add("d-none");
+          }
+        });
+      });
+
       window.updateStatus = function (id, newStatus) {
-        pendingResId = id; pendingResStatus = newStatus;
+        pendingResId = id; 
+        pendingResStatus = newStatus;
+
+        if (newStatus === "cancelled") {
+          // Open dedicated cancellation reason modal
+          const errAlert = document.getElementById("cancelErrorAlert");
+          if (errAlert) errAlert.classList.add("d-none");
+          document.getElementById("resCustomReasonWrap").classList.add("d-none");
+          document.getElementById("resCustomReasonText").value = "";
+          document.getElementById("rcReason1").checked = true;
+          if (cancelReservationModal) cancelReservationModal.show();
+          return;
+        }
+
         let actionText = newStatus.toUpperCase();
         if (newStatus === "seated") actionText = "CHECK IN";
         if (newStatus === "completed") actionText = "END SESSION";
         document.getElementById('confirmActionText').innerText = `Update this reservation to ${actionText}?`;
         confirmActionModal.show();
       };
+
       document.getElementById('executeActionBtn').addEventListener('click', async () => {
           if (!pendingResId) return;
           const btn = document.getElementById('executeActionBtn');
@@ -485,6 +594,85 @@
               btn.innerHTML = 'Confirm'; btn.disabled = false;
               confirmActionModal.hide(); pendingResId = null; pendingResStatus = null;
           }
+      });
+
+      // CONFIRM CANCELLATION BUTTON
+      document.getElementById('confirmCancelResBtn').addEventListener('click', async () => {
+        if (!pendingResId) return;
+        const errAlert = document.getElementById("cancelErrorAlert");
+        if (errAlert) errAlert.classList.add("d-none");
+
+        const selectedRadio = document.querySelector('input[name="resCancelReasonRadio"]:checked');
+        let finalReason = selectedRadio ? selectedRadio.value : "Cancelled by Admin";
+
+        if (finalReason === "Others") {
+          const customText = (document.getElementById("resCustomReasonText").value || "").trim();
+          if (!customText) {
+            if (errAlert) {
+              errAlert.innerText = "Please specify the custom cancellation reason.";
+              errAlert.classList.remove("d-none");
+            }
+            return;
+          }
+          finalReason = customText;
+        }
+
+        const btn = document.getElementById('confirmCancelResBtn');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Cancelling...';
+        btn.disabled = true;
+
+        try {
+          // Free up reserved table slot in reservationSlots if exists
+          const resObj = allRes.find((r) => r.id === pendingResId);
+          if (resObj && resObj.date && resObj.time && resObj.tableSize) {
+            const tableMatch = resObj.tableSize.match(/Table (\d+)/);
+            if (tableMatch) {
+              const tableId = tableMatch[1];
+              await remove(ref(db, `reservationSlots/${resObj.date}/${resObj.time}/tables/${tableId}`));
+            }
+          }
+
+          await update(ref(db, "reservations/" + pendingResId), { 
+            status: "cancelled",
+            rejectionReason: finalReason,
+            cancelledBy: "admin",
+            cancelledAt: Date.now()
+          });
+
+          // Cancel linked payment in payments node
+          try {
+            const paySnap = await get(ref(db, 'payments'));
+            if (paySnap.exists()) {
+              paySnap.forEach((child) => {
+                const pData = child.val();
+                if (child.key === pendingResId || pData.reservationId === pendingResId) {
+                  update(ref(db, `payments/${child.key}`), {
+                    status: 'cancelled',
+                    rejectionReason: finalReason,
+                    cancellationReason: finalReason,
+                    cancelledBy: 'admin',
+                    cancelledAt: Date.now()
+                  });
+                }
+              });
+            }
+          } catch (pErr) {
+            console.warn("Could not sync payment cancellation from admin:", pErr);
+          }
+
+          if (cancelReservationModal) cancelReservationModal.hide();
+          pendingResId = null;
+          pendingResStatus = null;
+        } catch (error) {
+          console.error("Error cancelling reservation:", error);
+          if (errAlert) {
+            errAlert.innerText = "Error: " + (error.message || "Failed to cancel reservation.");
+            errAlert.classList.remove("d-none");
+          }
+        } finally {
+          btn.innerHTML = '<i class="fa-solid fa-calendar-xmark me-1"></i> Confirm Cancellation';
+          btn.disabled = false;
+        }
       });
 
       // ==========================================
@@ -638,7 +826,14 @@
         document.getElementById("confirmTableBtn").disabled = false;
       };
 
-      document.getElementById("resPax").addEventListener("input", () => {
+      document.getElementById("resPax").addEventListener("input", function () {
+        let val = parseInt(this.value);
+        if (val > 15) {
+          this.value = 15;
+          showWalkInError("Maximum allowed party size is 15 guests.");
+        } else if (val < 1 && this.value !== "") {
+          this.value = 1;
+        }
         selectedTable = null; document.getElementById("resTableSize").value = "";
         document.getElementById("confirmTableBtn").disabled = true;
         document.getElementById("selectedTableInfo").innerHTML = '<small class="text-muted">Click on a table to select</small>';
@@ -791,7 +986,7 @@
                     </div>
                     <div class="d-flex align-items-center">
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                      <span class="fw-bold mx-2" style="width: 20px; text-align:center;" id="qty_${uniqueID}">${currentQty}</span>
+                      <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${currentQty}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                     </div>
                   </div>
@@ -855,7 +1050,7 @@
                       </div>
                       <div class="d-flex align-items-center">
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                        <span class="fw-bold mx-2" style="width: 20px; text-align:center;" id="qty_${uniqueID}">${currentQty}</span>
+                        <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${currentQty}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                       </div>
                     </div>
@@ -889,11 +1084,24 @@
 
       window.updateCart = function (id, change) {
         if (!advanceCart[id]) advanceCart[id] = { ...currentMenuData[id], qty: 0 };
-        let newQty = Math.max(0, advanceCart[id].qty + change);
+        let newQty = Math.min(99, Math.max(0, advanceCart[id].qty + change));
         advanceCart[id].qty = newQty;
         const qtyEl = document.getElementById(`qty_${id}`);
-        if (qtyEl) qtyEl.innerText = newQty;
+        if (qtyEl) qtyEl.value = newQty;
         if (newQty === 0) delete advanceCart[id];
+        updateTotalDisplay();
+      };
+
+      window.setCartQty = function (id, val) {
+        let num = parseInt(val);
+        if (isNaN(num) || num < 0) num = 0;
+        if (num > 99) num = 99;
+
+        if (!advanceCart[id]) advanceCart[id] = { ...currentMenuData[id], qty: 0 };
+        advanceCart[id].qty = num;
+        const qtyEl = document.getElementById(`qty_${id}`);
+        if (qtyEl && qtyEl.value != num) qtyEl.value = num;
+        if (num === 0) delete advanceCart[id];
         updateTotalDisplay();
       };
 
@@ -915,6 +1123,12 @@
 
         if (!document.getElementById("resTableSize").value) {
           showWalkInError("Please select a table from the floor map before proceeding.");
+          return;
+        }
+
+        const paxCount = parseInt(document.getElementById("resPax").value);
+        if (isNaN(paxCount) || paxCount < 1 || paxCount > 15) {
+          showWalkInError("Party size must be between 1 and 15 guests.");
           return;
         }
 

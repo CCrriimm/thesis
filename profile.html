@@ -175,10 +175,77 @@
         </div>
     </div>
 
+    <!-- Customer Cancel Modal (5 Common Reasons + Others) -->
+    <div class="modal fade" id="customerCancelModal" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 overflow-hidden shadow-lg">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title fw-bold" id="customerCancelModalTitle"><i class="fa-solid fa-triangle-exclamation me-2"></i> Cancel Booking</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <p class="text-muted small mb-3">Please let us know why you are cancelling. This helps us improve our service.</p>
+            <div id="customerCancelErrorAlert" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3"></div>
+
+            <label class="form-label fw-bold small text-dark">Reason for Cancellation:</label>
+            <div class="space-y-2 mb-3">
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReason1" value="Change of Schedule / Unforeseen Conflict" checked>
+                <label class="form-check-label fw-bold small" for="ccReason1">
+                  1. Change of Schedule / Unforeseen Conflict
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReason2" value="Selected Wrong Date, Time, or Table">
+                <label class="form-check-label fw-bold small" for="ccReason2">
+                  2. Selected Wrong Date, Time, or Table
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReason3" value="Accidental / Duplicate Order or Reservation">
+                <label class="form-check-label fw-bold small" for="ccReason3">
+                  3. Accidental / Duplicate Order or Reservation
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReason4" value="Change of Mind / Group Plans Cancelled">
+                <label class="form-check-label fw-bold small" for="ccReason4">
+                  4. Change of Mind / Group Plans Cancelled
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReason5" value="Emergency / Transportation or Weather Issue">
+                <label class="form-check-label fw-bold small" for="ccReason5">
+                  5. Emergency / Transportation or Weather Issue
+                </label>
+              </div>
+              <div class="form-check p-2 bg-white rounded border mb-2">
+                <input class="form-check-input ms-0 me-2" type="radio" name="custCancelReasonRadio" id="ccReasonOther" value="Others">
+                <label class="form-check-label fw-bold small" for="ccReasonOther">
+                  6. Others (Please specify below)
+                </label>
+              </div>
+            </div>
+
+            <div id="custCustomReasonWrap" class="d-none mt-2">
+              <label class="form-label fw-bold small text-muted">Specify Reason:</label>
+              <textarea id="custCustomReasonText" class="form-control" rows="3" placeholder="Type reason for cancelling..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer justify-content-end bg-white border-top">
+            <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Back</button>
+            <button type="button" id="confirmCustomerCancelBtn" class="btn btn-danger px-4 fw-bold">
+              <i class="fa-solid fa-xmark me-1"></i> Confirm Cancellation
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <script type="module">
-        // Added 'update' to the imports for the edit name feature
-        import { auth, db, ref, get, update, onValue, onAuthStateChanged, signOut } from "./js/firebase-config.js";
+        // Added 'update' and 'remove' to the imports for profile and cancellation features
+        import { auth, db, ref, get, update, remove, onValue, onAuthStateChanged, signOut } from "./js/firebase-config.js";
 
         let currentUserUid = "";
         let currentUserName = "";
@@ -316,6 +383,179 @@
             }
         }
 
+        function formatTo12Hour(timeStr) {
+            if (!timeStr) return "";
+            if (timeStr.includes("AM") || timeStr.includes("PM")) return timeStr;
+            const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+            if (match) {
+                let h = parseInt(match[1], 10);
+                const m = match[2];
+                const ampm = h >= 12 ? "PM" : "AM";
+                h = h % 12 || 12;
+                return `${h}:${m} ${ampm}`;
+            }
+            return timeStr;
+        }
+
+        // Customer Cancellation Logic
+        let pendingCancelType = null;
+        let pendingCancelId = null;
+        let pendingCancelDate = null;
+        let pendingCancelTime = null;
+        let pendingCancelTable = null;
+        let customerCancelModalInstance = null;
+
+        document.querySelectorAll('input[name="custCancelReasonRadio"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const wrap = document.getElementById('custCustomReasonWrap');
+                if (wrap) {
+                    if (e.target.value === 'Others') {
+                        wrap.classList.remove('d-none');
+                    } else {
+                        wrap.classList.add('d-none');
+                    }
+                }
+            });
+        });
+
+        window.openCustomerCancel = function(type, id, date = null, time = null, tableSize = null) {
+            pendingCancelType = type;
+            pendingCancelId = id;
+            pendingCancelDate = date;
+            pendingCancelTime = time;
+            pendingCancelTable = tableSize;
+
+            const modalTitle = document.getElementById('customerCancelModalTitle');
+            if (modalTitle) {
+                modalTitle.innerHTML = type === 'reservation' 
+                    ? `<i class="fa-solid fa-triangle-exclamation me-2"></i> Cancel Reservation`
+                    : `<i class="fa-solid fa-triangle-exclamation me-2"></i> Cancel Pickup Order`;
+            }
+
+            const r1 = document.getElementById('ccReason1');
+            if (r1) r1.checked = true;
+            const wrap = document.getElementById('custCustomReasonWrap');
+            if (wrap) wrap.classList.add('d-none');
+            const customText = document.getElementById('custCustomReasonText');
+            if (customText) customText.value = '';
+            const errAlert = document.getElementById('customerCancelErrorAlert');
+            if (errAlert) errAlert.classList.add('d-none');
+
+            if (!customerCancelModalInstance) {
+                customerCancelModalInstance = new bootstrap.Modal(document.getElementById('customerCancelModal'));
+            }
+            customerCancelModalInstance.show();
+        };
+
+        document.getElementById('confirmCustomerCancelBtn').addEventListener('click', async () => {
+            const errAlert = document.getElementById('customerCancelErrorAlert');
+            if (errAlert) errAlert.classList.add('d-none');
+
+            const selectedRadio = document.querySelector('input[name="custCancelReasonRadio"]:checked');
+            let finalReason = selectedRadio ? selectedRadio.value : "";
+            if (finalReason === 'Others') {
+                const customVal = document.getElementById('custCustomReasonText').value.trim();
+                if (!customVal) {
+                    if (errAlert) {
+                        errAlert.textContent = "Please provide details for the cancellation reason.";
+                        errAlert.classList.remove('d-none');
+                    }
+                    return;
+                }
+                finalReason = customVal;
+            }
+
+            const btn = document.getElementById('confirmCustomerCancelBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Cancelling...';
+
+            try {
+                if (pendingCancelType === 'reservation') {
+                    await update(ref(db, `reservations/${pendingCancelId}`), {
+                        status: 'cancelled',
+                        rejectionReason: finalReason,
+                        cancellationReason: finalReason,
+                        cancelledBy: 'customer',
+                        cancelledAt: Date.now()
+                    });
+
+                    if (pendingCancelDate && pendingCancelTime && pendingCancelTable) {
+                        const tableMatch = pendingCancelTable.match(/Table (\d+)/i);
+                        if (tableMatch) {
+                            const tableId = "table_" + tableMatch[1];
+                            try {
+                                await remove(ref(db, `reservationSlots/${pendingCancelDate}/${pendingCancelTime}/tables/${tableId}`));
+                            } catch (slotErr) {
+                                console.warn("Could not remove slot:", slotErr);
+                            }
+                        }
+                    }
+
+                    // Cancel linked payment in payments node
+                    try {
+                        const paySnap = await get(ref(db, 'payments'));
+                        if (paySnap.exists()) {
+                            paySnap.forEach((child) => {
+                                const pData = child.val();
+                                if (child.key === pendingCancelId || pData.reservationId === pendingCancelId) {
+                                    update(ref(db, `payments/${child.key}`), {
+                                        status: 'cancelled',
+                                        rejectionReason: finalReason,
+                                        cancellationReason: finalReason,
+                                        cancelledBy: 'customer',
+                                        cancelledAt: Date.now()
+                                    });
+                                }
+                            });
+                        }
+                    } catch (pErr) {
+                        console.warn("Could not sync payment cancellation:", pErr);
+                    }
+                } else if (pendingCancelType === 'order') {
+                    await update(ref(db, `orders/${pendingCancelId}`), {
+                        status: 'cancelled',
+                        rejectionReason: finalReason,
+                        cancellationReason: finalReason,
+                        cancelledBy: 'customer',
+                        cancelledAt: Date.now()
+                    });
+
+                    // Cancel linked payment in payments node
+                    try {
+                        const paySnap = await get(ref(db, 'payments'));
+                        if (paySnap.exists()) {
+                            paySnap.forEach((child) => {
+                                const pData = child.val();
+                                if (child.key === pendingCancelId || pData.orderId === pendingCancelId) {
+                                    update(ref(db, `payments/${child.key}`), {
+                                        status: 'cancelled',
+                                        rejectionReason: finalReason,
+                                        cancellationReason: finalReason,
+                                        cancelledBy: 'customer',
+                                        cancelledAt: Date.now()
+                                    });
+                                }
+                            });
+                        }
+                    } catch (pErr) {
+                        console.warn("Could not sync payment cancellation:", pErr);
+                    }
+                }
+
+                if (customerCancelModalInstance) {
+                    customerCancelModalInstance.hide();
+                }
+            } catch (err) {
+                if (errAlert) {
+                    errAlert.textContent = "Failed to cancel: " + err.message;
+                    errAlert.classList.remove('d-none');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-xmark me-1"></i> Confirm Cancellation';
+            }
+        });
+
         // 3. LOAD RESERVATIONS (Real-time)
         function loadMyReservations() {
             onValue(ref(db, 'reservations'), (snapshot) => {
@@ -342,11 +582,38 @@
                         else if (r.status === "approved") badge = `<span class="status-badge bg-success text-white"><i class="fa-solid fa-check me-1"></i> Approved</span>`;
                         else if (r.status === "seated") badge = `<span class="status-badge bg-dark text-white"><i class="fa-solid fa-chair me-1"></i> Currently Seated</span>`;
                         else if (r.status === "completed") badge = `<span class="status-badge bg-secondary text-white">Completed</span>`;
-                        else badge = `<span class="status-badge bg-danger text-white">Rejected</span>`;
+                        else if (r.status === "cancelled") badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i> Cancelled</span>`;
+                        else badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-xmark me-1"></i> Rejected</span>`;
 
                         let advanceBadge = "";
                         if (r.notes && r.notes.includes("[ADVANCE ORDER]")) {
                             advanceBadge = `<div class="mt-2 small p-2 bg-light border rounded"><i class="fa-solid fa-utensils text-warning me-1"></i> <b>Advance Order:</b> ${r.notes.replace("[ADVANCE ORDER]", "").split("[NOTES]")[0].trim()}</div>`;
+                        }
+
+                        let reasonBanner = "";
+                        if (r.status === "cancelled" || r.status === "rejected") {
+                            const reasonText = r.rejectionReason || r.cancellationReason || "No specific reason provided.";
+                            const reasonLabel = r.status === 'cancelled' 
+                                ? (r.cancelledBy === 'customer' ? 'Cancellation Reason:' : 'Cancelled by Restaurant:') 
+                                : 'Rejection Reason:';
+                            reasonBanner = `
+                                <div class="alert alert-danger py-2 px-3 small mt-2 mb-0 border-0 rounded-3">
+                                    <div class="fw-bold text-danger mb-1"><i class="fa-solid fa-circle-exclamation me-1"></i> ${reasonLabel}</div>
+                                    <span class="text-dark">${reasonText}</span>
+                                </div>
+                            `;
+                        }
+
+                        let cancelBtn = "";
+                        if (r.status === "pending") {
+                            const safeTableSize = (r.tableSize || "").replace(/'/g, "\\'");
+                            cancelBtn = `
+                                <div class="mt-2 pt-2 border-top d-flex justify-content-end">
+                                    <button type="button" onclick="openCustomerCancel('reservation', '${r.id}', '${r.date}', '${r.time}', '${safeTableSize}')" class="btn btn-sm btn-outline-danger">
+                                        <i class="fa-solid fa-ban me-1"></i> Cancel Reservation
+                                    </button>
+                                </div>
+                            `;
                         }
 
                         container.innerHTML += `
@@ -361,7 +628,9 @@
                                         <p class="text-muted mb-2 small"><i class="fa-regular fa-clock me-1"></i> ${r.time} &nbsp;|&nbsp; <i class="fa-solid fa-users me-1"></i> ${r.pax} Guests</p>
                                         <div class="small text-dark bg-light px-2 py-1 rounded border d-inline-block mb-2"><b>Table:</b> ${r.tableSize}</div>
                                         ${advanceBadge}
+                                        ${reasonBanner}
                                     </div>
+                                    ${cancelBtn}
                                 </div>
                             </div>
                         `;
@@ -401,7 +670,33 @@
                         else if (o.status === "preparing") badge = `<span class="status-badge bg-info text-dark"><i class="fa-solid fa-fire-burner me-1"></i> Kitchen is Preparing</span>`;
                         else if (o.status === "done") badge = `<span class="status-badge bg-success text-white"><i class="fa-solid fa-bag-shopping me-1"></i> Ready for Pickup!</span>`;
                         else if (o.status === "claimed") badge = `<span class="status-badge bg-secondary text-white"><i class="fa-solid fa-check-double me-1"></i> Completed & Claimed</span>`;
-                        else badge = `<span class="status-badge bg-danger text-white">Rejected</span>`;
+                        else if (o.status === "cancelled") badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i> Cancelled</span>`;
+                        else badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-xmark me-1"></i> Rejected</span>`;
+
+                        let orderReasonBanner = "";
+                        if (o.status === "cancelled" || o.status === "rejected") {
+                            const reasonText = o.rejectionReason || o.cancellationReason || "No specific reason provided.";
+                            const reasonLabel = o.status === 'cancelled' 
+                                ? (o.cancelledBy === 'customer' ? 'Cancellation Reason:' : 'Cancelled by Restaurant:') 
+                                : 'Rejection Reason:';
+                            orderReasonBanner = `
+                                <div class="alert alert-danger py-2 px-3 small mt-2 mb-0 border-0 rounded-3">
+                                    <div class="fw-bold text-danger mb-1"><i class="fa-solid fa-circle-exclamation me-1"></i> ${reasonLabel}</div>
+                                    <span class="text-dark">${reasonText}</span>
+                                </div>
+                            `;
+                        }
+
+                        let orderCancelBtn = "";
+                        if (o.status === "pending") {
+                            orderCancelBtn = `
+                                <div class="mt-2 pt-2 border-top d-flex justify-content-end">
+                                    <button type="button" onclick="openCustomerCancel('order', '${o.id}')" class="btn btn-sm btn-outline-danger">
+                                        <i class="fa-solid fa-ban me-1"></i> Cancel Order
+                                    </button>
+                                </div>
+                            `;
+                        }
 
                         container.innerHTML += `
                             <div class="col-md-6 col-12">
@@ -413,10 +708,12 @@
                                         </div>
                                         <h5 class="fw-bold text-success mb-2">₱${parseFloat(o.total).toFixed(2)}</h5>
                                         <div class="small mb-2 bg-light p-2 rounded border"><b>Items:</b> ${o.items}</div>
+                                        ${orderReasonBanner}
                                     </div>
                                     <div class="pt-2 border-top">
-                                        <small class="text-muted"><i class="fa-solid fa-person-walking me-1"></i> Pickup Time: <b>${o.pickupTime}</b></small>
+                                        <small class="text-muted"><i class="fa-solid fa-person-walking me-1"></i> Pickup Time: <b>${formatTo12Hour(o.pickupTime)}</b></small>
                                     </div>
+                                    ${orderCancelBtn}
                                 </div>
                             </div>
                         `;

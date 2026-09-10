@@ -532,30 +532,21 @@
           if (user) {
               const firstLetter = user.email.charAt(0).toUpperCase();
 
-              authSection.innerHTML = `
-                  <div class="d-flex align-items-center gap-2">
-                      <a href="profile.html" class="profile-circle" title="${user.email}">
-                          ${firstLetter}
-                      </a>
-                      <button id="logoutBtn" class="btn btn-dark rounded-pill px-4">Logout</button>
-                  </div>
-              `;
+                // Desktop: Profile circle
+                authSection.innerHTML = `
+                    <a href="profile.html" class="profile-circle" title="${user.email}">
+                        ${firstLetter}
+                    </a>
+                `;
 
-              authSectionMobile.innerHTML = `
-                  <div class="d-flex flex-column align-items-center gap-2 mb-2">
-                      <a href="profile.html" class="profile-circle" title="${user.email}">
-                          ${firstLetter}
-                      </a>
-                      <button id="logoutBtnMobile" class="btn btn-dark rounded-pill px-4">Logout</button>
-                  </div>
-              `;
-
-              document.getElementById("logoutBtn").addEventListener("click", () => {
-                  signOut(auth).then(() => window.location.reload());
-              });
-              document.getElementById("logoutBtnMobile").addEventListener("click", () => {
-                  signOut(auth).then(() => window.location.reload());
-              });
+                // Mobile: Profile circle
+                authSectionMobile.innerHTML = `
+                    <div class="d-flex justify-content-center mb-2">
+                        <a href="profile.html" class="profile-circle" title="${user.email}">
+                            ${firstLetter}
+                        </a>
+                    </div>
+                `;
           } else {
               authSection.innerHTML = `
                   <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>

@@ -246,6 +246,7 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body p-4 bg-light">
+            <div id="modalClaimError" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3"></div>
             <div class="row g-3 mb-3">
               <div class="col-md-6">
                 <div class="p-3 bg-white rounded-3 border h-100">
@@ -376,7 +377,7 @@
           snapshot.forEach((child) => {
             const reservation = child.val();
             const reservationDate = new Date(reservation.date).toLocaleDateString();
-            if (reservationDate === today) {
+            if (reservationDate === today && reservation.status !== "cancelled" && reservation.status !== "rejected") {
               todayCount++;
             }
           });
@@ -407,6 +408,20 @@
         renderReadyPickupOrders();
       });
 
+      function formatTo12Hour(timeStr) {
+        if (!timeStr) return "";
+        if (timeStr.includes("AM") || timeStr.includes("PM")) return timeStr;
+        const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (match) {
+          let h = parseInt(match[1], 10);
+          const m = match[2];
+          const ampm = h >= 12 ? "PM" : "AM";
+          h = h % 12 || 12;
+          return `${h}:${m} ${ampm}`;
+        }
+        return timeStr;
+      }
+
       function renderReadyPickupOrders() {
         const container = document.getElementById("readyPickupOrdersContainer");
         const countBadge = document.getElementById("readyPickupCount");
@@ -430,7 +445,7 @@
           const shortId = order.id.substring(1, 6).toUpperCase();
           const itemsSummary = (order.items || "No items").replace(/, /g, " • ");
           const totalFormatted = parseFloat(order.total || 0).toFixed(2);
-          const pickupTime = order.pickupTime || "ASAP";
+          const pickupTime = formatTo12Hour(order.pickupTime) || "ASAP";
 
           cardsHtml += `
             <div class="col-md-6 col-lg-4">
@@ -469,7 +484,7 @@
 
         document.getElementById("modalOrderRef").innerText = `#${shortId}`;
         document.getElementById("modalCustomerName").innerText = order.customerName || "Customer";
-        document.getElementById("modalPickupTime").innerText = order.pickupTime || "Standard Pickup";
+        document.getElementById("modalPickupTime").innerText = formatTo12Hour(order.pickupTime) || "Standard Pickup";
         document.getElementById("modalTotalAmount").innerText = "₱" + parseFloat(order.total || 0).toFixed(2);
 
         // Format items with line breaks
@@ -505,14 +520,16 @@
       };
 
       // Mark Order as Claimed
-      document.getElementById("markClaimedBtn").addEventListener("click", async () => {
+      document.getElementById("claimOrderBtn").addEventListener("click", async () => {
         if (!currentModalOrderId) return;
-        const btn = document.getElementById("markClaimedBtn");
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Claiming...';
+        const errEl = document.getElementById("modalClaimError");
+        if (errEl) errEl.classList.add("d-none");
+
+        const btn = document.getElementById("claimOrderBtn");
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Marking Claimed...';
         btn.disabled = true;
 
         try {
-          // Update order status to 'claimed' so it disappears from 'done' ready list
           await update(ref(db, "orders/" + currentModalOrderId), {
             status: "claimed",
             claimedAt: Date.now(),
@@ -524,7 +541,10 @@
           }
         } catch (error) {
           console.error(error);
-          alert("Error marking order as claimed. Please try again.");
+          if (errEl) {
+            errEl.innerText = "Error marking order as claimed. Please try again.";
+            errEl.classList.remove("d-none");
+          }
         } finally {
           btn.innerHTML = '<i class="fa-solid fa-check-double me-2"></i> Mark as Claimed';
           btn.disabled = false;

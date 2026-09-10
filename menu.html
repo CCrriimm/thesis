@@ -147,8 +147,15 @@
       .payment-box { background: #fff3cd; border: 1px solid #ffe69c; border-radius: 10px; padding: 15px; text-align: center; }
       .qr-placeholder { width: 170px; height: 170px; background: white; border: 2px dashed #ffc107; margin: 10px auto; display: flex; align-items: center; justify-content: center; border-radius: 10px; overflow: hidden; }
       .qr-img { width: 100%; height: 100%; object-fit: contain; cursor: pointer; transition: transform 0.2s; }
-      .qr-img:hover { transform: scale(1.03); }
       .btn-orange { background-color: var(--toms-orange); color: white; border-radius: 50px; font-weight: bold; border: none; }
+      .qty-input { width: 44px; height: 32px; text-align: center; font-weight: bold; border: 1px solid #ced4da; border-radius: 6px; padding: 2px; font-size: 0.9rem; }
+      .qty-input:focus { border-color: var(--toms-orange); outline: none; box-shadow: 0 0 0 0.2rem rgba(255, 107, 0, 0.25); }
+      .qty-step-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--toms-orange); background: white; color: var(--toms-orange); font-weight: bold; display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; transition: 0.15s; }
+      .qty-step-btn:hover { background-color: var(--toms-orange); color: white; }
+      /* Remove number input spinner arrows */
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type=number] { -moz-appearance: textfield; }
     </style>
   </head>
   <body>
@@ -198,6 +205,7 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
+            <div id="checkoutErrorAlert" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3" role="alert"></div>
             <div id="cartItemsList" class="mb-4"></div>
             <h4 class="fw-bold text-end border-top pt-3 mb-4">Total: ₱<span id="cartTotalModal">0.00</span></h4>
 
@@ -247,6 +255,57 @@
       </div>
     </div>
 
+    <!-- Quantity & Item Options Selection Modal -->
+    <div class="modal fade" id="selectQtyModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow-lg overflow-hidden">
+          <div class="modal-header bg-dark text-white py-3">
+            <h5 class="modal-title fw-bold"><i class="fa-solid fa-cart-plus text-warning me-2"></i> Select Quantity</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <div class="d-flex align-items-center gap-3 bg-white p-3 rounded-3 border mb-3">
+              <img id="sqModalImg" src="" alt="Food" class="rounded-3 shadow-sm" style="width: 75px; height: 75px; object-fit: cover;" onerror="this.onerror=null; this.src='Media/logo.png';" />
+              <div class="flex-grow-1">
+                <h5 class="fw-bold mb-1 text-dark" id="sqModalItemName"></h5>
+                <p class="text-muted small mb-1" id="sqModalDesc" style="line-height: 1.2;"></p>
+                <div class="fw-bold text-success fs-5">₱<span id="sqModalPrice">0.00</span></div>
+              </div>
+            </div>
+
+            <!-- Flavors / Options if any -->
+            <div id="sqModalOptionsWrap" class="bg-white p-3 rounded-3 border mb-3 d-none">
+              <label class="form-label fw-bold small text-dark mb-2" id="sqModalOptionsLabel">
+                <i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select Flavor(s):
+              </label>
+              <div id="sqModalOptionsList" class="d-flex flex-column gap-2"></div>
+            </div>
+
+            <!-- Quantity Selector Box -->
+            <div class="bg-white p-3 rounded-3 border mb-3 text-center">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-2 d-block">Quantity</label>
+              <div class="d-flex align-items-center justify-content-center gap-3">
+                <button type="button" class="btn btn-outline-warning text-dark fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; font-size: 1.3rem;" onclick="changeSQModalQty(-1)">
+                  <i class="fa-solid fa-minus"></i>
+                </button>
+                <input type="number" min="1" max="99" id="sqModalQty" class="form-control text-center fw-bold fs-4 bg-light" style="width: 80px; height: 48px; border-radius: 10px;" value="1" oninput="clampSQModalQty()" />
+                <button type="button" class="btn btn-outline-warning text-dark fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px; font-size: 1.3rem;" onclick="changeSQModalQty(1)">
+                  <i class="fa-solid fa-plus"></i>
+                </button>
+              </div>
+              <div class="mt-2 text-muted small">
+                Subtotal: <b class="text-dark">₱<span id="sqModalSubtotal">0.00</span></b>
+              </div>
+            </div>
+
+            <button type="button" id="confirmAddToCartBtn" class="btn btn-orange w-100 py-3 fw-bold fs-5 shadow-sm" onclick="confirmAddToCartFromModal()">
+              <i class="fa-solid fa-cart-plus me-2"></i> Add to Cart • ₱<span id="sqModalBtnPrice">0.00</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
       <script type="module">
       import { auth, db, ref, get, onValue, push, onAuthStateChanged, storage, storageRef, uploadBytes, getDownloadURL } from "./js/firebase-config.js";
@@ -264,7 +323,7 @@
 
       // Auth Check
       onAuthStateChanged(auth, async (user) => {
-        if (!user) { alert("Please login to place an order."); window.location.href = "login.html"; } 
+        if (!user) { window.location.href = "login.html"; } 
         else {
           const snap = await get(ref(db, "users/" + user.uid));
           if (snap.exists()) currentUserName = `${snap.val().firstName} ${snap.val().lastName}`;
@@ -388,14 +447,13 @@
                                         <h6 class="fw-bold mb-0">${item.name}</h6>
                                         <span class="fw-bold text-success d-block mt-1">₱${item.price}</span>
                                     </div>
-                                    <button class="btn btn-add btn-sm" onclick="addToCartWithOptions('${key}')">
-                                        <i class="fa-solid fa-plus"></i> Add
+                                    <button class="btn btn-add btn-sm ms-2" onclick="openSelectQtyModal('${key}')">
+                                        <i class="fa-solid fa-cart-plus me-1"></i> Add
                                     </button>
                                 </div>
                                 ${descHTML}
                             </div>
                         </div>
-                        ${dropdownsHTML}
                     </div>`;
               }
               categoryHTML += `</div>`;
@@ -412,41 +470,146 @@
           localStorage.setItem('tomsCart', JSON.stringify(cart));
       }
 
-      // Add to Cart Logic
-      window.addToCartWithOptions = function (dbKey) {
-        const itemData = currentMenuData[dbKey];
-        let selectedOptionsArray = [];
-        let count = itemData.optionCount || 1;
+      // Quantity Selection Modal Logic
+      let activeItemKey = null;
+      let selectQtyModalInstance = null;
 
-        if (itemData.options) {
-            for(let i = 0; i < count; i++) {
-                let dropdown = document.getElementById(`flavor_${dbKey}_${i}`);
-                if(dropdown) selectedOptionsArray.push(dropdown.value);
-            }
+      window.openSelectQtyModal = function (dbKey) {
+        const itemData = currentMenuData[dbKey];
+        if (!itemData) return;
+
+        activeItemKey = dbKey;
+        const modalEl = document.getElementById("selectQtyModal");
+        if (!selectQtyModalInstance) {
+          selectQtyModalInstance = new bootstrap.Modal(modalEl);
+        }
+
+        document.getElementById("sqModalItemName").innerText = itemData.name;
+        document.getElementById("sqModalDesc").innerText = itemData.desc || "";
+        document.getElementById("sqModalPrice").innerText = parseFloat(itemData.price).toFixed(2);
+        document.getElementById("sqModalImg").src = getItemImage(itemData);
+
+        // Reset Qty to 1
+        const qtyInput = document.getElementById("sqModalQty");
+        qtyInput.value = 1;
+
+        // Render Options (if any)
+        const optWrap = document.getElementById("sqModalOptionsWrap");
+        const optList = document.getElementById("sqModalOptionsList");
+        optList.innerHTML = "";
+
+        if (itemData.options && itemData.options.length > 0) {
+          optWrap.classList.remove("d-none");
+          const count = itemData.optionCount || 1;
+          document.getElementById("sqModalOptionsLabel").innerHTML = `<i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select ${count} Flavor(s):`;
+          for (let i = 0; i < count; i++) {
+            let select = document.createElement("select");
+            select.className = "form-select mb-1 fw-bold";
+            select.id = `modal_flavor_${i}`;
+            itemData.options.forEach(opt => {
+              let optEl = document.createElement("option");
+              optEl.value = opt;
+              optEl.textContent = opt;
+              select.appendChild(optEl);
+            });
+            optList.appendChild(select);
+          }
+        } else {
+          optWrap.classList.add("d-none");
+        }
+
+        updateSQModalSubtotal();
+        selectQtyModalInstance.show();
+      };
+
+      window.changeSQModalQty = function (delta) {
+        const input = document.getElementById("sqModalQty");
+        let val = parseInt(input.value) || 1;
+        val = Math.min(99, Math.max(1, val + delta));
+        input.value = val;
+        updateSQModalSubtotal();
+      };
+
+      window.clampSQModalQty = function () {
+        const input = document.getElementById("sqModalQty");
+        let val = parseInt(input.value);
+        if (isNaN(val) || val < 1) {
+          if (input.value !== "") input.value = 1;
+        } else if (val > 99) {
+          input.value = 99;
+        }
+        updateSQModalSubtotal();
+      };
+
+      function updateSQModalSubtotal() {
+        if (!activeItemKey) return;
+        const itemData = currentMenuData[activeItemKey];
+        if (!itemData) return;
+        const qty = parseInt(document.getElementById("sqModalQty").value) || 1;
+        const subtotal = (parseFloat(itemData.price) * qty).toFixed(2);
+        document.getElementById("sqModalSubtotal").innerText = subtotal;
+        document.getElementById("sqModalBtnPrice").innerText = subtotal;
+      }
+
+      window.confirmAddToCartFromModal = function () {
+        if (!activeItemKey) return;
+        const itemData = currentMenuData[activeItemKey];
+        if (!itemData) return;
+
+        const qtyInput = document.getElementById("sqModalQty");
+        let addQty = parseInt(qtyInput.value) || 1;
+        addQty = Math.min(99, Math.max(1, addQty));
+
+        let selectedOptionsArray = [];
+        if (itemData.options && itemData.options.length > 0) {
+          const count = itemData.optionCount || 1;
+          for (let i = 0; i < count; i++) {
+            const dropdown = document.getElementById(`modal_flavor_${i}`);
+            if (dropdown) selectedOptionsArray.push(dropdown.value);
+          }
         }
 
         let joinedOptions = selectedOptionsArray.join(", ");
-        const cartKey = joinedOptions ? `${dbKey}_${joinedOptions.replace(/[^a-zA-Z0-9]/g, '')}` : dbKey;
+        const cartKey = joinedOptions ? `${activeItemKey}_${joinedOptions.replace(/[^a-zA-Z0-9]/g, '')}` : activeItemKey;
 
         if (cart[cartKey]) {
-          cart[cartKey].qty++;
+          cart[cartKey].qty = Math.min(99, cart[cartKey].qty + addQty);
         } else {
-          cart[cartKey] = { ...itemData, qty: 1, chosenOption: joinedOptions };
+          cart[cartKey] = { ...itemData, qty: addQty, chosenOption: joinedOptions };
         }
-        
-        saveCart(); // Save immediately
+
+        saveCart();
         updateCartUI();
+
+        if (selectQtyModalInstance) {
+          selectQtyModalInstance.hide();
+        }
       };
 
       // Change Qty inside Modal
       window.changeQty = function (cartKey, amount) {
         if (cart[cartKey]) {
-          cart[cartKey].qty += amount;
-          if (cart[cartKey].qty <= 0) delete cart[cartKey];
-          
+          let newQty = cart[cartKey].qty + amount;
+          if (newQty <= 0) {
+            delete cart[cartKey];
+          } else {
+            cart[cartKey].qty = Math.min(99, newQty);
+          }
           saveCart(); // Save immediately
           updateCartUI();
         }
+      };
+
+      // Set Qty directly via typing inside Modal
+      window.setCartItemQty = function (cartKey, val) {
+        let num = parseInt(val);
+        if (isNaN(num) || num <= 0) {
+          delete cart[cartKey];
+        } else {
+          cart[cartKey].qty = Math.min(99, num);
+        }
+        saveCart(); // Save immediately
+        updateCartUI();
       };
 
       // Update Cart UI
@@ -470,7 +633,7 @@
                 </div>
                 <div class="d-flex align-items-center">
                     <button type="button" class="btn btn-sm btn-outline-danger px-2" onclick="changeQty('${cartKey}', -1)">-</button>
-                    <span class="mx-3 fw-bold">${item.qty}</span>
+                    <input type="number" min="1" max="99" class="qty-input mx-2" value="${item.qty}" onchange="setCartItemQty('${cartKey}', this.value)" />
                     <button type="button" class="btn btn-sm btn-outline-success px-2" onclick="changeQty('${cartKey}', 1)">+</button>
                 </div>
             </div>`;
@@ -485,15 +648,56 @@
         else { cartBtn.classList.add("d-none"); cartList.innerHTML = '<p class="text-center text-muted my-4">Your cart is empty.</p>'; }
       }
 
+      function formatTo12Hour(timeStr) {
+        if (!timeStr) return "";
+        if (timeStr.includes("AM") || timeStr.includes("PM")) return timeStr;
+        const parts = timeStr.split(":");
+        if (parts.length < 2) return timeStr;
+        let hour = parseInt(parts[0], 10);
+        let min = parts[1];
+        if (isNaN(hour)) return timeStr;
+        const ampm = hour >= 12 ? "PM" : "AM";
+        hour = hour % 12 || 12;
+        return `${hour}:${min} ${ampm}`;
+      }
+
+      function showCheckoutError(msg) {
+        const errEl = document.getElementById("checkoutErrorAlert");
+        if (errEl) {
+          errEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i> ${msg}`;
+          errEl.classList.remove("d-none");
+          errEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }
+
+      function clearCheckoutError() {
+        const errEl = document.getElementById("checkoutErrorAlert");
+        if (errEl) errEl.classList.add("d-none");
+      }
+
       // Checkout Logic
       document.getElementById("checkoutForm").addEventListener("submit", async (e) => {
         e.preventDefault();
+        clearCheckoutError();
+
         const btn = document.getElementById("submitBtn");
         const fileInput = document.getElementById("orderReceipt").files[0];
         const totalPrice = document.getElementById("cartTotalModal").innerText;
+        const rawPickupTime = document.getElementById("pickupTime").value;
 
-        if (!fileInput) return alert("Please upload a receipt.");
+        if (!rawPickupTime) {
+          showCheckoutError("Please specify a pickup time.");
+          return;
+        }
+
+        if (!fileInput) {
+          showCheckoutError("Please upload your payment receipt before submitting.");
+          return;
+        }
+
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; btn.disabled = true;
+
+        const formattedPickup = formatTo12Hour(rawPickupTime);
 
         let orderSummary = "";
         for (let id in cart) {
@@ -510,7 +714,7 @@
             customerName: currentUserName,
             items: orderSummary,
             total: totalPrice,
-            pickupTime: document.getElementById("pickupTime").value,
+            pickupTime: formattedPickup,
             status: "pending",
             timestamp: Date.now(),
           });
@@ -542,7 +746,8 @@
               window.location.href = "profile.html";
           });
         } catch (error) {
-          console.error(error); alert("Error: " + error.message);
+          console.error(error);
+          showCheckoutError("Error: " + (error.message || "Failed to submit order. Please try again."));
           btn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Confirm Order'; btn.disabled = false;
         }
       });
