@@ -205,6 +205,30 @@
             </div>
           </div>
         </div>
+      <!-- Table Refills Ready To Serve Section -->
+      <div class="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
+        <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center border-bottom">
+          <div class="d-flex align-items-center gap-2">
+            <div class="rounded-circle p-2 d-inline-flex align-items-center justify-content-center" style="width: 38px; height: 38px; background-color: #ff9800; color: #fff;">
+              <i class="fa-solid fa-bell-concierge"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-0 text-dark">Table Refills to Serve</h5>
+              <small class="text-muted">Cooked by kitchen, ready for floor staff to deliver to tables</small>
+            </div>
+          </div>
+          <span class="badge rounded-pill px-3 py-2 fs-6 pulse-badge" id="refillCountBadge" style="background-color: #ff9800; color: #fff;">
+            <span id="readyRefillsCount">0</span> Refills Waiting
+          </span>
+        </div>
+        <div class="card-body p-4 bg-light">
+          <div class="row g-3" id="readyRefillsContainer">
+            <div class="col-12 text-center text-muted py-4">
+              <i class="fa-solid fa-spinner fa-spin fa-2x mb-2"></i>
+              <p class="mb-0">Checking for refills ready to serve...</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Online Orders Ready For Pickup Section -->
@@ -314,6 +338,7 @@
       let orderPickupModal = null;
       let currentModalOrderId = null;
       let activeReadyOrders = [];
+      let activeReadyRefills = [];
       let paymentsData = {};
 
       window.addEventListener("DOMContentLoaded", () => {
@@ -384,6 +409,96 @@
         }
         document.getElementById("todayReservationsCount").textContent = todayCount;
       });//----------- End of Today's Reservations Check
+
+      // ==========================================
+      // TABLE REFILLS READY TO SERVE LISTENER
+      // ==========================================
+      onValue(ref(db, "refills"), (snapshot) => {
+        activeReadyRefills = [];
+        if (snapshot.exists()) {
+          snapshot.forEach((child) => {
+            const refillData = child.val();
+            // Chef cooked the refill and clicked "Serve to Table" (status === "serving")
+            if (refillData.status === "serving") {
+              activeReadyRefills.push({
+                id: child.key,
+                ...refillData,
+              });
+            }
+          });
+        }
+
+        // Sort latest first
+        activeReadyRefills.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        renderReadyRefills();
+      });
+
+      function renderReadyRefills() {
+        const container = document.getElementById("readyRefillsContainer");
+        const countBadge = document.getElementById("readyRefillsCount");
+        if (!container) return;
+
+        if (countBadge) countBadge.innerText = activeReadyRefills.length;
+
+        if (activeReadyRefills.length === 0) {
+          container.innerHTML = `
+            <div class="col-12 text-center text-muted py-4">
+              <i class="fa-solid fa-circle-check fa-3x text-success mb-2 opacity-75"></i>
+              <h6 class="fw-bold mb-1 text-dark">No Table Refills Waiting to Serve</h6>
+              <p class="small text-muted mb-0">When the kitchen chef presses "Serve to Table", refill requests will appear here for staff to confirm delivery.</p>
+            </div>
+          `;
+          return;
+        }
+
+        let cardsHtml = "";
+        activeReadyRefills.forEach((refill) => {
+          const timeFormatted = refill.timestamp ? new Date(refill.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "Just now";
+          cardsHtml += `
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 d-flex flex-column justify-content-between border-start border-4" style="border-left: 4px solid #ff9800 !important;">
+                <div>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge" style="background-color: #ff9800; color: #000; font-size: 0.9rem;"><i class="fa-solid fa-chair me-1"></i> Table ${refill.tableNum}</span>
+                    <small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${timeFormatted}</small>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-1">Refill Items:</h6>
+                  <div class="p-2 rounded bg-light mb-3 font-monospace small" style="line-height: 1.5; color: #333; max-height: 140px; overflow-y: auto;">
+                    ${refill.items ? refill.items.replace(/, /g, "<br>") : "Refill items"}
+                  </div>
+                </div>
+                <button type="button" class="btn btn-success w-100 fw-bold py-2 shadow-sm rounded-pill" onclick="markRefillServed('${refill.id}', '${refill.tableNum}', this)">
+                  <i class="fa-solid fa-check-double me-1"></i> Mark as Served
+                </button>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = cardsHtml;
+      }
+
+      window.markRefillServed = async function (refillId, tableNum, btnEl) {
+        if (btnEl) {
+          btnEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Serving...';
+          btnEl.disabled = true;
+        }
+        try {
+          await update(ref(db, "refills/" + refillId), {
+            status: "completed",
+            servedAt: Date.now(),
+            servedBy: currentUserUid || "admin",
+          });
+        } catch (error) {
+          console.error("Error marking refill as served:", error);
+          if (btnEl) {
+            btnEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Failed';
+            setTimeout(() => {
+              btnEl.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> Mark as Served';
+              btnEl.disabled = false;
+            }, 2000);
+          }
+        }
+      };
 
       // ==========================================
       // READY FOR PICKUP ORDERS LISTENER

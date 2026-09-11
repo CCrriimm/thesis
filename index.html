@@ -15,8 +15,34 @@
             --toms-dark: #212529;
         }
 
+        html, body { 
+          overflow-x: hidden;
+          max-width: 100%;
+        }
+
         body { 
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+
+        @media (min-width: 992px) {
+            .navbar > .container {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+            }
+            .navbar-brand {
+                grid-column: 1;
+                justify-self: start;
+                margin-right: 0;
+            }
+            #navbarNav {
+                grid-column: 2;
+                justify-self: center;
+            }
+            #authSection {
+                grid-column: 3;
+                justify-self: end;
+            }
         }
 
         .profile-circle {

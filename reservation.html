@@ -19,6 +19,10 @@
         --toms-orange: #f57d10ff;
         --toms-dark: #212529;
       }
+      html, body {
+        overflow-x: hidden;
+        max-width: 100%;
+      }
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         background-color: #f8f9fa;
@@ -1439,7 +1443,7 @@
                     </div>
                     <div class="d-flex align-items-center">
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                      <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
+                      <input type="number" min="0" max="30" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                       <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                     </div>
                   </div>
@@ -1503,7 +1507,7 @@
                       </div>
                       <div class="d-flex align-items-center">
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                        <input type="number" min="0" max="99" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
+                        <input type="number" min="0" max="30" class="qty-input mx-1" id="qty_${uniqueID}" value="${advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                       </div>
                     </div>
@@ -1601,7 +1605,7 @@
 
         let newQty = advanceCart[id].qty + change;
         if (newQty < 0) newQty = 0;
-        if (newQty > 99) newQty = 99;
+        if (newQty > 30) newQty = 30;
 
         advanceCart[id].qty = newQty;
         const qtyEl = document.getElementById(`qty_${id}`);
@@ -1620,7 +1624,7 @@
       window.setCartQty = function (id, val) {
         let num = parseInt(val);
         if (isNaN(num) || num < 0) num = 0;
-        if (num > 99) num = 99;
+        if (num > 30) num = 30;
 
         if (!advanceCart[id]) {
           advanceCart[id] = { ...currentMenuData[id], qty: 0 };

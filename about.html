@@ -16,10 +16,36 @@
             --toms-light: #fff8f0;
         }
 
+        html, body { 
+            overflow-x: hidden;
+            max-width: 100%;
+        }
+
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: var(--toms-dark);
             background-color: #fcfcfc;
+        }
+
+        @media (min-width: 992px) {
+            .navbar > .container {
+                display: grid;
+                grid-template-columns: 1fr auto 1fr;
+                align-items: center;
+            }
+            .navbar-brand {
+                grid-column: 1;
+                justify-self: start;
+                margin-right: 0;
+            }
+            #navbarNav {
+                grid-column: 2;
+                justify-self: center;
+            }
+            #authSection {
+                grid-column: 3;
+                justify-self: end;
+            }
         }
 
         .profile-circle {
@@ -80,6 +106,8 @@
             padding: 80px 0 60px;
             position: relative;
             overflow: hidden;
+            width: 100%;
+            max-width: 100%;
         }
         .about-hero::after {
             content: '';
@@ -90,6 +118,25 @@
             height: 500px;
             background: radial-gradient(circle, rgba(245, 125, 16, 0.18) 0%, rgba(245, 125, 16, 0) 70%);
             border-radius: 50%;
+            pointer-events: none;
+        }
+
+        @media (max-width: 576px) {
+            .about-hero {
+                padding: 60px 0 45px;
+            }
+            .about-hero h1 {
+                font-size: 2.2rem;
+            }
+            .about-hero p.lead {
+                font-size: 1.05rem;
+            }
+            .cta-banner {
+                padding: 35px 20px;
+            }
+            .cta-banner h2 {
+                font-size: 1.9rem;
+            }
         }
 
         .feature-card {
@@ -240,7 +287,7 @@
   <!-- Story & Vision Section -->
   <section class="py-5">
       <div class="container py-4">
-          <div class="row align-items-center g-5">
+          <div class="row align-items-center g-4 g-lg-5">
               <div class="col-lg-6">
                   <span class="fw-bold text-uppercase" style="color: var(--toms-orange); letter-spacing: 1px;">Fresh, Crispy & Flavorful</span>
                   <h2 class="display-5 fw-bold mt-2 mb-4">Born from a Passion for Great Wings</h2>

@@ -444,7 +444,8 @@
         if (snapshot.exists()) {
           snapshot.forEach((child) => {
             let data = child.val();
-            if (data.status === "preparing" || data.status === "serving") {
+            // Once chef presses 'Serve to Table', it becomes 'serving' and moves to Admin/Front Desk dashboard
+            if (data.status === "preparing") {
               activeRefills.push({ id: child.key, type: "refill", ...data });
             }
           });
@@ -524,10 +525,7 @@
           let html = "";
 
           if (ticket.type === "refill") {
-            let actionBtn =
-              ticket.status === "preparing"
-                ? `<button onclick="triggerAction('refill', '${ticket.id}', 'serving', 'Mark this refill as \\'Serving to Table\\'?')" class="btn-done w-100" style="background-color: #ff9800; color: #000;">Serve to Table</button>`
-                : `<button onclick="triggerAction('refill', '${ticket.id}', 'served', 'Mark this refill as \\'Done\\' (Completed)?')" class="btn-done w-100 bg-success">Done (Served)</button>`;
+            let actionBtn = `<button onclick="triggerAction('refill', '${ticket.id}', 'serving', 'Notify front desk/floor staff that Table ${ticket.tableNum} refill is ready to serve?')" class="btn-done w-100" style="background-color: #ff9800; color: #000; font-weight: bold;"><i class=\"fa-solid fa-bell-concierge me-1\"></i> Serve to Table</button>`;
 
             html = `
               <div class="col-md-4 col-lg-3">

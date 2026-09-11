@@ -19,7 +19,32 @@
         .flavor-row:last-child { border-bottom: none; padding-bottom: 0; }
         .qty-btn { background: white; border: 1px solid var(--toms-orange); color: var(--toms-orange); width: 32px; height: 32px; border-radius: 50%; font-weight: bold; display: flex; align-items: center; justify-content: center; padding: 0; }
         .qty-btn:active { background: var(--toms-orange); color: white; }
-        .qty-display { width: 30px; text-align: center; font-weight: bold; font-size: 1.1rem; }
+        .qty-input {
+            width: 48px;
+            height: 32px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            padding: 2px;
+            font-size: 1rem;
+            color: #212529;
+            background-color: #fff;
+        }
+        .qty-input:focus {
+            border-color: var(--toms-orange);
+            outline: none;
+            box-shadow: 0 0 0 0.2rem rgba(245, 125, 16, 0.25);
+        }
+        /* Hide browser number input spinner arrows */
+        .qty-input::-webkit-outer-spin-button,
+        .qty-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .qty-input {
+            -moz-appearance: textfield;
+        }
         .status-card { background: white; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 30px 20px; text-align: center; border-top: 5px solid var(--toms-orange); }
         .active-order-list { background: #f8f9fa; border-radius: 10px; padding: 15px; text-align: left; font-family: monospace; font-size: 1.1rem; color: #555; margin-top: 15px; }
         .floating-bottom { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px; box-shadow: 0 -5px 15px rgba(0,0,0,0.1); z-index: 1000; }
@@ -278,9 +303,9 @@
                 <div class="flavor-row">
                     <span class="fw-bold text-dark">${itemName}</span>
                     <div class="d-flex align-items-center">
-                        <button class="btn qty-btn" onclick="updateQty('${safeId}', -1)">-</button>
-                        <span class="qty-display" id="${safeId}">0</span>
-                        <button class="btn qty-btn" onclick="updateQty('${safeId}', 1)">+</button>
+                        <button type="button" class="btn qty-btn" onclick="updateQty('${safeId}', -1)">-</button>
+                        <input type="number" min="0" max="${limit}" class="qty-input mx-2" id="${safeId}" value="0" oninput="handleRefillInput('${safeId}')" onchange="handleRefillChange('${safeId}')" />
+                        <button type="button" class="btn qty-btn" onclick="updateQty('${safeId}', 1)">+</button>
                     </div>
                 </div>`;
             }
@@ -359,45 +384,87 @@
             
             let itemData = trackedItemsList[itemIndex];
             let el = document.getElementById(elementId);
-            let current = parseInt(el.innerText);
+            let current = parseInt(el.value) || 0;
             let newVal = current + change;
             
             if (newVal < 0) return; // Can't order negative amounts
 
-            // Check if this item is part of a Category-wide Limit (Chicken, Sides, Drinks)
+            // Check if this item is part of a Category-wide Limit (Chicken, Drinks)
             if (itemData.isCatLimit) {
-                let currentCategoryTotal = 0;
+                let currentOtherTotal = 0;
                 
-                // Count how many items from this specific category are currently selected
+                // Count how many items from this specific category are currently selected by others
                 trackedItemsList.forEach(tItem => {
-                    if (tItem.category === itemData.category) {
-                        currentCategoryTotal += parseInt(document.getElementById(tItem.id).innerText);
+                    if (tItem.category === itemData.category && tItem.id !== elementId) {
+                        currentOtherTotal += parseInt(document.getElementById(tItem.id).value) || 0;
                     }
                 });
 
-                if (change > 0 && currentCategoryTotal >= itemData.maxLimit) {
+                if (currentOtherTotal + newVal > itemData.maxLimit) {
                     showToast(`Category limit reached (${itemData.maxLimit} total)`, false);
                     return; // Stop them from adding more
                 }
                 
-                el.innerText = newVal;
+                el.value = newVal;
             } 
-            // Else, use the Standard Item Limit (Rice & Dip)
+            // Else, use the Standard Item Limit (Rice & Dip, Sides)
             else {
                 if (newVal <= itemData.maxLimit) {
-                    el.innerText = newVal;
+                    el.value = newVal;
                 } else {
                     showToast(`Maximum limit reached (${itemData.maxLimit})`, false);
                 }
             }
-        }
+        };
+
+        // DIRECT INPUT / TYPING LOGIC
+        window.handleRefillInput = function(elementId) {
+            let itemIndex = trackedItemsList.findIndex(i => i.id === elementId);
+            if (itemIndex === -1) return;
+            let itemData = trackedItemsList[itemIndex];
+            let el = document.getElementById(elementId);
+            let val = parseInt(el.value);
+
+            if (isNaN(val) || val < 0) {
+                if (el.value !== "") el.value = 0;
+                return;
+            }
+
+            if (itemData.isCatLimit) {
+                let currentOtherTotal = 0;
+                trackedItemsList.forEach(tItem => {
+                    if (tItem.category === itemData.category && tItem.id !== elementId) {
+                        currentOtherTotal += parseInt(document.getElementById(tItem.id).value) || 0;
+                    }
+                });
+                let allowedMax = Math.max(0, itemData.maxLimit - currentOtherTotal);
+                if (val > allowedMax) {
+                    el.value = allowedMax;
+                    showToast(`Category limit reached (Max allowed: ${allowedMax})`, false);
+                }
+            } else {
+                if (val > itemData.maxLimit) {
+                    el.value = itemData.maxLimit;
+                    showToast(`Maximum limit reached (${itemData.maxLimit})`, false);
+                }
+            }
+        };
+
+        window.handleRefillChange = function(elementId) {
+            let el = document.getElementById(elementId);
+            if (!el.value || isNaN(parseInt(el.value)) || parseInt(el.value) < 0) {
+                el.value = 0;
+            }
+            handleRefillInput(elementId);
+        };
 
         document.getElementById('submitRefillBtn').addEventListener('click', async () => {
             let itemsString = "";
             let totalItemsCount = 0;
 
             trackedItemsList.forEach(item => {
-                let currentQty = parseInt(document.getElementById(item.id).innerText);
+                let el = document.getElementById(item.id);
+                let currentQty = el ? (parseInt(el.value) || 0) : 0;
                 if (currentQty > 0) {
                     itemsString += `${currentQty}x ${item.name}, `;
                     totalItemsCount += currentQty;
@@ -421,7 +488,8 @@
                 showToast("Order sent to the kitchen!", true);
 
                 trackedItemsList.forEach(item => {
-                    document.getElementById(item.id).innerText = "0";
+                    let el = document.getElementById(item.id);
+                    if (el) el.value = "0";
                 });
                 
             } catch (error) {
