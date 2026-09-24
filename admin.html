@@ -145,6 +145,9 @@
           <a href="kitchen.html"><i class="fa-solid fa-fire-burner"></i> Kitchen</a>
         </li>
         <li>
+          <a href="admin-reports.html"><i class="fa-solid fa-chart-line"></i> Reports</a>
+        </li>
+        <li>
           <a href="admin-users.html"
             ><i class="fa-solid fa-user-shield"></i> Admins</a
           >
@@ -293,28 +296,14 @@
             </div>
 
             <!-- Ordered Food Items -->
-            <div class="p-3 bg-white rounded-3 border mb-3">
+            <div class="p-3 bg-white rounded-3 border">
               <h6 class="fw-bold mb-2 text-dark"><i class="fa-solid fa-utensils me-2 text-warning"></i> Ordered Items:</h6>
               <div id="modalOrderItems" class="p-3 bg-light rounded border fs-6 font-monospace" style="white-space: pre-wrap;">--</div>
-            </div>
-
-            <!-- Payment Receipt Proof (if available) -->
-            <div class="p-3 bg-white rounded-3 border">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-receipt me-2 text-warning"></i> Payment Proof:</h6>
-                <a id="modalReceiptFullLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary d-none">
-                  <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Full Size
-                </a>
-              </div>
-              <div class="text-center bg-light p-2 rounded border" id="modalReceiptWrap">
-                <img id="modalReceiptImg" src="" alt="Payment Receipt" class="img-fluid rounded shadow-sm" style="max-height: 280px; object-fit: contain;" />
-                <p id="modalNoReceipt" class="text-muted small my-3 d-none"><i class="fa-solid fa-circle-info me-1"></i> No receipt uploaded for this order.</p>
-              </div>
             </div>
           </div>
           <div class="modal-footer bg-white border-top d-flex justify-content-between px-4 py-3">
             <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-success px-5 py-2 fw-bold shadow-sm" id="markClaimedBtn">
+            <button type="button" class="btn btn-success px-5 py-2 fw-bold shadow-sm" id="claimOrderBtn">
               <i class="fa-solid fa-check-double me-2"></i> Mark as Claimed
             </button>
           </div>
@@ -603,30 +592,35 @@
         document.getElementById("modalTotalAmount").innerText = "₱" + parseFloat(order.total || 0).toFixed(2);
 
         // Format items with line breaks
-        const formattedItems = (order.items || "None")
-          .split(",")
-          .map((i) => i.trim())
-          .filter((i) => i)
-          .join("\n");
-        document.getElementById("modalOrderItems").innerText = formattedItems || order.items;
-
-        // Payment Proof
-        const payment = paymentsData[orderId] || null;
-        const imgEl = document.getElementById("modalReceiptImg");
-        const noReceiptEl = document.getElementById("modalNoReceipt");
-        const fullLinkEl = document.getElementById("modalReceiptFullLink");
-
-        if (payment && payment.receiptUrl) {
-          imgEl.src = payment.receiptUrl;
-          imgEl.classList.remove("d-none");
-          noReceiptEl.classList.add("d-none");
-          fullLinkEl.href = payment.receiptUrl;
-          fullLinkEl.classList.remove("d-none");
+        let formattedItems = "None";
+        if (Array.isArray(order.items)) {
+          formattedItems = order.items.map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `${qty}x ${name}${opt}`;
+            }
+            return String(i);
+          }).join("\n");
+        } else if (typeof order.items === "object" && order.items !== null) {
+          formattedItems = Object.values(order.items).map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `${qty}x ${name}${opt}`;
+            }
+            return String(i);
+          }).join("\n");
         } else {
-          imgEl.classList.add("d-none");
-          noReceiptEl.classList.remove("d-none");
-          fullLinkEl.classList.add("d-none");
+          formattedItems = String(order.items || "None")
+            .split(/[,;\n]/)
+            .map((i) => i.trim())
+            .filter(Boolean)
+            .join("\n");
         }
+        document.getElementById("modalOrderItems").innerText = formattedItems || "None";
 
         if (!orderPickupModal) {
           orderPickupModal = new bootstrap.Modal(document.getElementById("orderPickupModal"));
@@ -651,19 +645,19 @@
             claimedBy: currentUserUid || "admin",
           });
 
+          currentModalOrderId = null;
           if (orderPickupModal) {
             orderPickupModal.hide();
           }
         } catch (error) {
-          console.error(error);
+          console.error("Error claiming order:", error);
           if (errEl) {
-            errEl.innerText = "Error marking order as claimed. Please try again.";
+            errEl.innerText = "Error marking order as claimed: " + (error.message || "Please try again.");
             errEl.classList.remove("d-none");
           }
         } finally {
           btn.innerHTML = '<i class="fa-solid fa-check-double me-2"></i> Mark as Claimed';
           btn.disabled = false;
-          currentModalOrderId = null;
         }
       });
 

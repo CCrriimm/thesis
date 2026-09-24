@@ -1,0 +1,1569 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Reports & Sales Summary</title>
+    <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+    />
+    <style>
+      :root {
+        --toms-orange: #f57d10ff;
+        --sidebar-width: 250px;
+      }
+      body {
+        background-color: #f8f9fa;
+        overflow-x: hidden;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      .sidebar {
+        width: var(--sidebar-width);
+        height: 100vh;
+        position: fixed;
+        background: #212529;
+        color: white;
+        z-index: 999;
+      }
+      .sidebar-header {
+        padding: 20px;
+        background: var(--toms-orange);
+      }
+      .sidebar-menu {
+        padding: 20px 0;
+        list-style: none;
+        margin: 0;
+      }
+      .sidebar-menu li a {
+        display: block;
+        padding: 15px 25px;
+        color: #adb5bd;
+        text-decoration: none;
+        border-left: 4px solid transparent;
+      }
+      .sidebar-menu li a:hover,
+      .sidebar-menu li a.active {
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        border-left-color: var(--toms-orange);
+      }
+      .sidebar-menu i {
+        margin-right: 10px;
+        width: 20px;
+        text-align: center;
+      }
+      .main-content {
+        margin-left: var(--sidebar-width);
+        padding: 30px;
+      }
+      .btn-orange {
+        background-color: var(--toms-orange);
+        color: white;
+        border: none;
+        font-weight: 600;
+      }
+      .btn-orange:hover {
+        background-color: #d1660a;
+        color: white;
+      }
+      .nav-pills .nav-link.active {
+        background-color: var(--toms-orange);
+      }
+      .nav-pills .nav-link {
+        color: #212529;
+        font-weight: bold;
+      }
+      .stat-card {
+        border-radius: 14px;
+        border: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+      }
+      .spreadsheet-table {
+        border-collapse: collapse;
+        width: 100%;
+        background-color: #fff;
+      }
+      .spreadsheet-table th {
+        background-color: #f1f3f5;
+        color: #212529;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        letter-spacing: 0.5px;
+        border: 1px solid #dee2e6;
+        padding: 10px 12px;
+        white-space: nowrap;
+      }
+      .spreadsheet-table td {
+        border: 1px solid #e9ecef;
+        padding: 10px 12px;
+        font-size: 0.88rem;
+        vertical-align: middle;
+      }
+      .spreadsheet-table tr:hover td {
+        background-color: #fdfaf6;
+      }
+      .spreadsheet-table tfoot td {
+        font-weight: 700;
+        background-color: #f8f9fa;
+        border-top: 2px solid #ced4da;
+      }
+
+      .section-hidden {
+        display: none !important;
+      }
+
+      /* PRINT SPECIFIC STYLES (Clean spreadsheet view) */
+      @media print {
+        @page {
+          size: portrait;
+          margin: 10mm;
+        }
+        body {
+          background-color: #fff !important;
+          color: #000 !important;
+          font-size: 9pt;
+        }
+        .no-print, .sidebar, #adminLogoutBtn, #reportTabs, #kpiRow {
+          display: none !important;
+        }
+        .main-content {
+          margin-left: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+        }
+        .print-header {
+          display: block !important;
+        }
+        .section-hidden, .d-none, [style*="display: none"] {
+          display: none !important;
+        }
+        #onlineSectionCard.section-hidden,
+        #onlineSectionCard.d-none,
+        #reservationSectionCard.section-hidden,
+        #reservationSectionCard.d-none {
+          display: none !important;
+        }
+        .spreadsheet-table {
+          width: 100% !important;
+          font-size: 8.5pt !important;
+          border: 1.5px solid #000 !important;
+        }
+        .spreadsheet-table th {
+          background-color: #eee !important;
+          color: #000 !important;
+          border: 1px solid #000 !important;
+          font-size: 8pt !important;
+          padding: 4px 6px !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .spreadsheet-table td {
+          border: 1px solid #888 !important;
+          padding: 4px 6px !important;
+          font-size: 8pt !important;
+        }
+        .spreadsheet-table tfoot td {
+          background-color: #f4f4f4 !important;
+          border-top: 1.5px solid #000 !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .card {
+          border: none !important;
+          box-shadow: none !important;
+          margin-bottom: 20px !important;
+        }
+        .card-header {
+          background-color: #f8f9fa !important;
+          border: 1px solid #000 !important;
+          border-bottom: none !important;
+          padding: 6px 12px !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .print-break-inside {
+          page-break-inside: avoid;
+        }
+        .badge {
+          border: 1px solid #444 !important;
+          color: #000 !important;
+          background: transparent !important;
+          font-weight: bold !important;
+          padding: 1px 4px !important;
+          font-size: 7.5pt !important;
+        }
+      }
+      .print-header {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar no-print">
+      <div class="sidebar-header">
+        <h4 class="mb-0 fw-bold">Tom's Admin</h4>
+      </div>
+      <ul class="sidebar-menu">
+        <li>
+          <a href="admin.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+        </li>
+        <li>
+          <a href="admin-payments.html"><i class="fa-solid fa-money-bill-wave"></i> Payments</a>
+        </li>
+        <li>
+          <a href="admin-tables.html"><i class="fa-solid fa-chair"></i> Tables</a>
+        </li>
+        <li>
+          <a href="admin-reservations.html"><i class="fa-solid fa-calendar-check"></i> Reservations</a>
+        </li>
+        <li>
+          <a href="kitchen.html"><i class="fa-solid fa-fire-burner"></i> Kitchen</a>
+        </li>
+        <li>
+          <a href="admin-reports.html" class="active"><i class="fa-solid fa-chart-line"></i> Reports</a>
+        </li>
+        <li>
+          <a href="admin-users.html"><i class="fa-solid fa-user-shield"></i> Admins</a>
+        </li>
+        <li class="mt-5">
+          <a href="#" id="adminLogoutBtn" class="text-danger"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- Printable Header with Tom's Chicken Logo (Appears on printout) -->
+      <div class="print-header mb-4 pb-3 border-bottom border-2 border-dark">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="d-flex align-items-center gap-3">
+            <img src="Media/logo.png" alt="Tom's Chicken Logo" style="width: 80px; height: 80px; object-fit: contain;" onerror="this.src='Media/Toms.jpg';" />
+            <div>
+              <h2 class="fw-bold mb-0 text-dark" style="letter-spacing: 0.5px;">TOM'S CHICKEN HOUSE</h2>
+              <div class="small fw-semibold text-muted">San Jose Branch • Official Order & Sales Report</div>
+              <div class="small text-muted">Generated on: <span id="printGeneratedTime" class="fw-bold text-dark">--</span></div>
+            </div>
+          </div>
+          <div class="text-end">
+            <span class="badge border border-dark text-dark px-3 py-2 fs-6" id="printScopeBadge">Consolidated Report</span>
+            <div class="small text-muted mt-1">Period: <strong id="printPeriodRange" class="text-dark">All Time</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Title Bar (Screen Only) -->
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 no-print">
+        <div>
+          <h2 class="fw-bold mb-1 text-dark">Sales & Order Reports</h2>
+          <p class="text-muted mb-0 small">Filter, audit, and print spreadsheet reports for Online Pickup & Advance Reservation orders.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-outline-dark fw-bold px-3 py-2 shadow-sm" id="btnExportCSV" onclick="exportToCSV()">
+            <i class="fa-solid fa-file-csv text-success me-1"></i> Export to CSV
+          </button>
+          <button type="button" class="btn btn-orange px-4 py-2 shadow-sm" id="btnPrintReport" onclick="triggerPrint()">
+            <i class="fa-solid fa-print me-2"></i> Print Report
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Panel (Screen Only) -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4 no-print">
+        <div class="card-body p-3 p-md-4">
+          <div class="row g-3 align-items-end">
+            <!-- Section Selector -->
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-1">Report Filter</label>
+              <select id="sectionFilter" class="form-select fw-bold" onchange="applyFilters()">
+                <option value="all" selected>All Reports (Consolidated)</option>
+                <option value="online">Online Pickup Orders Only</option>
+                <option value="reservation">Reservations & Advance Orders Only</option>
+              </select>
+            </div>
+
+            <!-- Date Range From -->
+            <div class="col-lg-2 col-md-3 col-6">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-1">From Date</label>
+              <input type="date" id="startDateInput" class="form-control fw-bold" onchange="applyFilters()" />
+            </div>
+
+            <!-- Date Range To -->
+            <div class="col-lg-2 col-md-3 col-6">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-1">To Date</label>
+              <input type="date" id="endDateInput" class="form-control fw-bold" onchange="applyFilters()" />
+            </div>
+
+            <!-- Status Filter -->
+            <div class="col-lg-2 col-md-6">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-1">Order Status</label>
+              <select id="statusFilter" class="form-select fw-bold" onchange="applyFilters()">
+                <option value="all" selected>All Finalized</option>
+                <option value="completed">Completed Only</option>
+                <option value="cancelled">Cancelled Only (Customer)</option>
+                <option value="rejected">Rejected Only (Staff)</option>
+              </select>
+            </div>
+
+            <!-- Search Keyword -->
+            <div class="col-lg-3 col-md-6">
+              <label class="form-label fw-bold small text-muted text-uppercase mb-1">Search Keyword</label>
+              <div class="input-group">
+                <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-search"></i></span>
+                <input type="text" id="searchInput" class="form-control border-start-0" placeholder="Search customer, ID, items..." oninput="applyFilters()" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Date Range Shortcuts -->
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+            <span class="small fw-bold text-muted me-1">Quick Dates:</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 date-pill" data-range="today" onclick="setQuickDate('today')">Today</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 date-pill" data-range="yesterday" onclick="setQuickDate('yesterday')">Yesterday</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 date-pill" data-range="thisWeek" onclick="setQuickDate('thisWeek')">This Week</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 date-pill" data-range="thisMonth" onclick="setQuickDate('thisMonth')">This Month</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 date-pill active" id="btnAllTime" data-range="allTime" onclick="setQuickDate('allTime')">All Time</button>
+            <button type="button" class="btn btn-sm btn-link text-danger ms-auto text-decoration-none fw-bold" id="btnResetFilters" onclick="resetAllFilters()">
+              <i class="fa-solid fa-rotate-left me-1"></i> Reset Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards (Updated on Filter, hidden on print) -->
+      <div class="row g-3 mb-4 no-print" id="kpiRow">
+        <!-- Total Revenue -->
+        <div class="col-md-3 col-6">
+          <div class="card stat-card shadow-sm bg-white p-3 p-md-4 border-start border-4 border-success">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-muted small fw-bold text-uppercase" id="kpiSalesTitle">Total Sales</span>
+              <span class="badge bg-success-subtle text-success rounded-pill px-2 py-1"><i class="fa-solid fa-peso-sign"></i></span>
+            </div>
+            <h3 class="fw-bold mb-0 text-dark" id="kpiTotalRevenue">₱0.00</h3>
+            <small class="text-muted" id="kpiFilteredLabel">Based on filtered criteria</small>
+          </div>
+        </div>
+
+        <!-- Online Pickup Orders -->
+        <div class="col-md-3 col-6">
+          <div class="card stat-card shadow-sm bg-white p-3 p-md-4 border-start border-4" style="border-left-color: var(--toms-orange) !important;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-muted small fw-bold text-uppercase">Online Orders</span>
+              <span class="badge bg-warning-subtle text-warning rounded-pill px-2 py-1"><i class="fa-solid fa-bag-shopping"></i></span>
+            </div>
+            <h3 class="fw-bold mb-0 text-dark" id="kpiOnlineRevenue">₱0.00</h3>
+            <small class="text-muted"><span id="kpiOnlineCount">0</span> orders</small>
+          </div>
+        </div>
+
+        <!-- Reservations & Advance Orders -->
+        <div class="col-md-3 col-6">
+          <div class="card stat-card shadow-sm bg-white p-3 p-md-4 border-start border-4 border-primary">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-muted small fw-bold text-uppercase">Advance Orders</span>
+              <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1"><i class="fa-solid fa-calendar-check"></i></span>
+            </div>
+            <h3 class="fw-bold mb-0 text-dark" id="kpiReservationRevenue">₱0.00</h3>
+            <small class="text-muted"><span id="kpiReservationCount">0</span> bookings</small>
+          </div>
+        </div>
+
+        <!-- Total Transactions Count -->
+        <div class="col-md-3 col-6">
+          <div class="card stat-card shadow-sm bg-white p-3 p-md-4 border-start border-4 border-dark">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-muted small fw-bold text-uppercase">Total Records</span>
+              <span class="badge bg-dark-subtle text-dark rounded-pill px-2 py-1"><i class="fa-solid fa-receipt"></i></span>
+            </div>
+            <h3 class="fw-bold mb-0 text-dark" id="kpiTotalCount">0</h3>
+            <small class="text-muted">Avg: <span id="kpiAvgOrderValue">₱0.00</span></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section Tabs Navigation (Screen Only) -->
+      <ul class="nav nav-pills mb-3 no-print" id="reportTabs">
+        <li class="nav-item">
+          <button class="nav-link active" id="tabBtnAll" onclick="setSectionView('all')">
+            <i class="fa-solid fa-layer-group me-1"></i> Consolidated (All)
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tabBtnOnline" onclick="setSectionView('online')">
+            <i class="fa-solid fa-bag-shopping me-1"></i> Online Pickup Orders (<span id="tabCountOnline">0</span>)
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="tabBtnReservation" onclick="setSectionView('reservation')">
+            <i class="fa-solid fa-calendar-check me-1"></i> Reservations & Advance Orders (<span id="tabCountReservation">0</span>)
+          </button>
+        </li>
+      </ul>
+
+      <!-- ======================================================== -->
+      <!-- ONLINE PICKUP ORDERS SPREADSHEET TABLE                   -->
+      <!-- ======================================================== -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden print-break-inside" id="onlineSectionCard">
+        <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center border-bottom">
+          <div class="d-flex align-items-center gap-2">
+            <div class="rounded-circle p-2 d-inline-flex align-items-center justify-content-center text-white" style="width: 32px; height: 32px; background-color: var(--toms-orange);">
+              <i class="fa-solid fa-bag-shopping fa-sm"></i>
+            </div>
+            <h5 class="fw-bold mb-0 text-dark">Online Pickup Orders</h5>
+          </div>
+          <div class="text-end">
+            <span class="badge bg-light text-dark border px-3 py-2 fw-bold" id="onlineSectionSubtotal">
+              Subtotal: ₱0.00 (<span id="onlineRowsCount">0</span> items)
+            </span>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="spreadsheet-table mb-0" id="onlineOrdersTable">
+              <thead>
+                <tr>
+                  <th style="width: 40px;" class="text-center">#</th>
+                  <th style="width: 130px;">Order ID</th>
+                  <th style="width: 150px;">Date & Time</th>
+                  <th>Items Ordered</th>
+                  <th style="width: 130px;">Pickup Time</th>
+                  <th style="width: 130px;" class="text-center">Status</th>
+                  <th style="width: 130px;" class="text-end">Amount Paid</th>
+                </tr>
+              </thead>
+              <tbody id="onlineOrdersTableBody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-4">
+                    <i class="fa-solid fa-spinner fa-spin me-2"></i> Loading online orders data...
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="6" class="text-end fw-bold">ONLINE ORDERS SUBTOTAL:</td>
+                  <td class="text-end text-success fw-bold fs-6" id="onlineFootSubtotal">₱0.00</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- RESERVATIONS & ADVANCE ORDERS SPREADSHEET                -->
+      <!-- ======================================================== -->
+      <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden print-break-inside" id="reservationSectionCard">
+        <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center border-bottom">
+          <div class="d-flex align-items-center gap-2">
+            <div class="rounded-circle p-2 d-inline-flex align-items-center justify-content-center text-white bg-primary" style="width: 32px; height: 32px;">
+              <i class="fa-solid fa-calendar-check fa-sm"></i>
+            </div>
+            <h5 class="fw-bold mb-0 text-dark">Reservations & Advance Orders</h5>
+          </div>
+          <div class="text-end">
+            <span class="badge bg-light text-dark border px-3 py-2 fw-bold" id="reservationSectionSubtotal">
+              Subtotal: ₱0.00 (<span id="reservationRowsCount">0</span> items)
+            </span>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="spreadsheet-table mb-0" id="reservationsTable">
+              <thead>
+                <tr>
+                  <th style="width: 40px;" class="text-center">#</th>
+                  <th style="width: 120px;">Booking ID</th>
+                  <th style="width: 140px;">Date & Time Slot</th>
+                  <th style="width: 150px;">Customer Name</th>
+                  <th style="width: 90px;" class="text-center">Type</th>
+                  <th style="width: 130px;">Table & Pax</th>
+                  <th>Advance Order & Notes</th>
+                  <th style="width: 110px;" class="text-center">Status</th>
+                  <th style="width: 120px;" class="text-end">Amount Paid</th>
+                </tr>
+              </thead>
+              <tbody id="reservationsTableBody">
+                <tr>
+                  <td colspan="9" class="text-center text-muted py-4">
+                    <i class="fa-solid fa-spinner fa-spin me-2"></i> Loading reservations data...
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="8" class="text-end fw-bold">ADVANCE ORDERS & RESERVATIONS SUBTOTAL:</td>
+                  <td class="text-end text-primary fw-bold fs-6" id="reservationFootSubtotal">₱0.00</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Printable Report Footer & Signature Lines (Appears on printout) -->
+      <div class="print-header mt-5 pt-4 print-break-inside">
+        <div class="row text-center mt-4">
+          <div class="col-4">
+            <div class="border-top border-dark pt-2 mx-3">
+              <strong class="d-block text-dark">Prepared By (Staff/Admin)</strong>
+              <small class="text-muted" id="printPreparedBy">Admin</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="border-top border-dark pt-2 mx-3">
+              <strong class="d-block text-dark">Verified / Store Manager</strong>
+              <small class="text-muted">Tom's Chicken Management</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="border-top border-dark pt-2 mx-3">
+              <strong class="d-block text-dark">Audit Date</strong>
+              <small class="text-muted" id="printAuditDate">--</small>
+            </div>
+          </div>
+        </div>
+        <div class="text-center text-muted small mt-4">
+          Tom's Chicken House • Official Confidential Report • System Powered
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase Logic & Interactive Report Engine -->
+    <script type="module">
+      import {
+        auth,
+        db,
+        ref,
+        get,
+        onAuthStateChanged,
+        onValue,
+        signOut,
+      } from "./js/firebase-config.js";
+
+      // Global State
+      let rawOrders = [];
+      let rawReservations = [];
+      let rawPayments = [];
+      let paymentsMap = {}; // Map by orderId & reservationId
+
+      let filteredOrders = [];
+      let filteredReservations = [];
+
+      let currentAdminName = "Admin";
+
+      // Auth & Role Check
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          window.location.href = "login.html";
+          return;
+        }
+        try {
+          const userSnap = await get(ref(db, "users/" + user.uid));
+          if (!userSnap.exists() || userSnap.val().role !== "admin") {
+            window.location.href = "login.html";
+            return;
+          }
+          currentAdminName = userSnap.val().name || user.email || "Admin";
+          const prepEl = document.getElementById("printPreparedBy");
+          if (prepEl) prepEl.innerText = currentAdminName;
+        } catch (e) {
+          console.error("Auth verify error:", e);
+        }
+      });
+
+      // Logout handler
+      const logoutBtn = document.getElementById("adminLogoutBtn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          signOut(auth).then(() => {
+            window.location.href = "login.html";
+          });
+        });
+      }
+
+      // Helper: Extract milliseconds timestamp from Firebase Push ID
+      function getPushIdTimestamp(id) {
+        if (!id || typeof id !== "string") return 0;
+        const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+        let time = 0;
+        const start = id.charAt(0) === "-" ? 1 : 0;
+        for (let i = start; i < start + 8 && i < id.length; i++) {
+          const c = id.charAt(i);
+          const val = PUSH_CHARS.indexOf(c);
+          if (val === -1) return 0;
+          time = time * 64 + val;
+        }
+        if (time > 1577836800000 && time < 2500000000000) {
+          return time;
+        }
+        return 0;
+      }
+
+      // Helper: Robust timestamp extractor
+      function getItemTimestamp(item, type) {
+        if (!item) return 0;
+
+        // 1. Direct timestamp / createdAt / claimedAt / timeOrdered
+        let val = item.timestamp ?? item.createdAt ?? item.claimedAt ?? item.timeOrdered;
+        if (typeof val === "number" && !isNaN(val) && val > 0) return val;
+        if (typeof val === "string" && !isNaN(Number(val)) && Number(val) > 0) return Number(val);
+        if (typeof val === "string") {
+          const parsed = Date.parse(val);
+          if (!isNaN(parsed) && parsed > 0) return parsed;
+        }
+
+        // 2. Date string (YYYY-MM-DD or MM/DD/YYYY)
+        if (item.date) {
+          const parsed = Date.parse(item.date);
+          if (!isNaN(parsed) && parsed > 0) return parsed;
+          const parts = String(item.date).split(/[-/]/).map((p) => parseInt(p, 10));
+          if (parts.length >= 3 && !parts.some(isNaN)) {
+            const y = parts[0] > 1000 ? parts[0] : parts[2];
+            const m = parts[0] > 1000 ? parts[1] - 1 : parts[0] - 1;
+            const d = parts[0] > 1000 ? parts[2] : parts[1];
+            return new Date(y, m, d, 12, 0, 0).getTime();
+          }
+        }
+
+        // 3. Fallback: Firebase Push ID timestamp
+        if (item.id) {
+          const pushTs = getPushIdTimestamp(item.id);
+          if (pushTs > 0) return pushTs;
+        }
+
+        return 0;
+      }
+
+      // Helper: Format Date
+      function formatDate(ts) {
+        if (!ts) return "--";
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return "--";
+        return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      }
+
+      // Helper: Format Time into 12-hour format
+      function formatTime(ts) {
+        if (!ts) return "--";
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return "--";
+        return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      }
+
+      // Helper: Convert any string like "14:30" or "14:30:00" to 12-hour format
+      function format12HourTimeStr(timeStr) {
+        if (!timeStr) return "--";
+        if (/am|pm/i.test(timeStr)) return timeStr;
+        const match = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (match) {
+          let hours = parseInt(match[1], 10);
+          const minutes = match[2];
+          const ampm = hours >= 12 ? "PM" : "AM";
+          hours = hours % 12;
+          hours = hours ? hours : 12;
+          return `${hours}:${minutes} ${ampm}`;
+        }
+        return timeStr;
+      }
+
+      // Helper: Format Peso
+      function formatPeso(val) {
+        const num = parseFloat(val) || 0;
+        return "₱" + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+
+      // Helper: Format Short ID matching payments and ordering receipt
+      function formatShortId(id) {
+        if (!id) return "--";
+        const str = String(id).trim();
+        if (str.startsWith("-") && str.length >= 6) {
+          return `#${str.substring(1, 6).toUpperCase()}`;
+        }
+        const clean = str.replace(/[^a-zA-Z0-9_]/g, "").toUpperCase();
+        return `#${clean.substring(0, 5)}`;
+      }
+
+      function getOrderReportId(ord) {
+        if (!ord) return "--";
+        const matchedPayment = paymentsMap["order_" + ord.id] || paymentsMap[ord.id];
+        if (matchedPayment && matchedPayment.id) {
+          return formatShortId(matchedPayment.id);
+        }
+        return formatShortId(ord.id);
+      }
+
+      function getReservationReportId(res) {
+        if (!res) return "--";
+        const matchedPayment = paymentsMap["res_" + res.id] || paymentsMap[res.id];
+        if (matchedPayment && matchedPayment.id) {
+          return formatShortId(matchedPayment.id);
+        }
+        return formatShortId(res.id);
+      }
+
+      // Helper: Check if record was rejected by staff from the payments tab
+      function isRecordRejected(item, matchedPayment) {
+        if (!item) return false;
+        // ONLY if it was rejected in the payments tab
+        if ((item.paymentStatus || "").toLowerCase() === "rejected") return true;
+        if (matchedPayment && (matchedPayment.status || "").toLowerCase() === "rejected") return true;
+        if ((item.status || "").toLowerCase() === "rejected") return true;
+        return false;
+      }
+
+      // Helper: Get final display status label: Completed, Rejected, or Cancelled
+      function getRecordStatusLabel(item, matchedPayment) {
+        const s = (item.status || "").toLowerCase().trim();
+        if (["claimed", "completed", "paid", "settled"].includes(s)) {
+          return "Completed";
+        }
+        if (isRecordRejected(item, matchedPayment)) {
+          return "Rejected";
+        }
+        return "Cancelled";
+      }
+
+      // Helper: Escape HTML
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      // Helper: Normalize lookalike characters for foolproof search (e.g. 1, l, i and 0, o)
+      function normalizeForSearch(str) {
+        if (!str) return "";
+        return String(str)
+          .toLowerCase()
+          .replace(/#|ord-|res-/g, "")
+          .replace(/[il1|]/g, "1")
+          .replace(/[o0]/g, "0")
+          .replace(/[^a-z0-9]/g, "");
+      }
+
+      // Helper: Format Order Items Safely
+      function formatItemsList(rawItems) {
+        if (!rawItems) return "No items recorded";
+        if (Array.isArray(rawItems)) {
+          return rawItems.map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `• ${qty}x ${name}${opt}`;
+            }
+            return `• ${String(i)}`;
+          }).join("<br>");
+        }
+        if (typeof rawItems === "object") {
+          return Object.values(rawItems).map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `• ${qty}x ${name}${opt}`;
+            }
+            return `• ${String(i)}`;
+          }).join("<br>");
+        }
+        const str = String(rawItems).trim();
+        const parts = str.split(/[,;\n]/).map((p) => p.trim()).filter(Boolean);
+        if (parts.length > 1) {
+          return parts.map((p) => `• ${p}`).join("<br>");
+        }
+        return str;
+      }
+
+      // Helper: Format Items for CSV Export
+      function formatItemsForCSV(rawItems) {
+        if (!rawItems) return "None";
+        if (Array.isArray(rawItems)) {
+          return rawItems.map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `${qty}x ${name}${opt}`;
+            }
+            return String(i);
+          }).join("; ");
+        }
+        if (typeof rawItems === "object") {
+          return Object.values(rawItems).map((i) => {
+            if (typeof i === "object" && i !== null) {
+              const name = i.name || i.title || "Item";
+              const qty = i.qty || i.quantity || 1;
+              const opt = i.chosenOption ? ` (${i.chosenOption})` : "";
+              return `${qty}x ${name}${opt}`;
+            }
+            return String(i);
+          }).join("; ");
+        }
+        return String(rawItems).replace(/[\r\n]+/g, " ; ");
+      }
+
+      // 1. LISTEN TO PAYMENTS
+      onValue(ref(db, "payments"), (snapshot) => {
+        rawPayments = [];
+        paymentsMap = {};
+        if (snapshot.exists()) {
+          snapshot.forEach((child) => {
+            const p = { id: child.key, ...child.val() };
+            rawPayments.push(p);
+            if (p.orderId) {
+              paymentsMap["order_" + p.orderId] = p;
+              paymentsMap[p.orderId] = p;
+            }
+            if (p.reservationId) {
+              paymentsMap["res_" + p.reservationId] = p;
+              paymentsMap[p.reservationId] = p;
+            }
+            paymentsMap[p.id] = p;
+          });
+        }
+        renderReport();
+      });
+
+      // 2. LISTEN TO ONLINE ORDERS
+      onValue(ref(db, "orders"), (snapshot) => {
+        rawOrders = [];
+        if (snapshot.exists()) {
+          snapshot.forEach((child) => {
+            const ord = { id: child.key, ...child.val() };
+            rawOrders.push(ord);
+          });
+        }
+        renderReport();
+      });
+
+      // 3. LISTEN TO RESERVATIONS & ADVANCE ORDERS
+      onValue(ref(db, "reservations"), (snapshot) => {
+        rawReservations = [];
+        if (snapshot.exists()) {
+          snapshot.forEach((child) => {
+            const res = { id: child.key, ...child.val() };
+            rawReservations.push(res);
+          });
+        }
+        renderReport();
+      });
+
+      // Main Filter & Render Function
+      window.applyFilters = function () {
+        renderReport();
+      };
+
+      function renderReport() {
+        try {
+          const sectionFilter = document.getElementById("sectionFilter")?.value || "all";
+          const startDateVal = document.getElementById("startDateInput")?.value || "";
+          const endDateVal = document.getElementById("endDateInput")?.value || "";
+          const statusFilter = document.getElementById("statusFilter")?.value || "all";
+          const searchKeyword = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
+
+          // Compute Start & End Timestamps
+          let startTs = 0;
+          let endTs = Infinity;
+          if (startDateVal) {
+            startTs = new Date(startDateVal + "T00:00:00").getTime();
+          }
+          if (endDateVal) {
+            endTs = new Date(endDateVal + "T23:59:59.999").getTime();
+          }
+
+          // 1. Filter Online Orders
+          filteredOrders = rawOrders.filter((ord) => {
+            const ts = getItemTimestamp(ord, "order");
+            if (startTs > 0 && ts > 0 && ts < startTs) return false;
+            if (endTs < Infinity && ts > 0 && ts > endTs) return false;
+
+            // Only Completed or Cancelled/Rejected orders belong in the report
+            const s = (ord.status || "").toLowerCase().trim();
+            const isCompleted = ["claimed", "completed", "paid", "settled"].includes(s);
+            const isCancelled = ["cancelled", "rejected"].includes(s);
+
+            if (!isCompleted && !isCancelled) return false;
+
+            const matchedPayment = paymentsMap["order_" + ord.id] || paymentsMap[ord.id];
+            const isRejected = !isCompleted && isRecordRejected(ord, matchedPayment);
+            const isCustomerCancelled = !isCompleted && !isRejected;
+
+            if (statusFilter === "completed" && !isCompleted) return false;
+            if (statusFilter === "cancelled" && !isCustomerCancelled) return false;
+            if (statusFilter === "rejected" && !isRejected) return false;
+
+            // Search keyword
+            if (searchKeyword) {
+              const rawKw = searchKeyword.toLowerCase();
+              const normKw = normalizeForSearch(searchKeyword);
+
+              const rawId = (ord.id || "").toLowerCase();
+              const reportId = getOrderReportId(ord).toLowerCase();
+              const paymentRawId = matchedPayment ? (matchedPayment.id || "").toLowerCase() : "";
+              const paymentShortId = matchedPayment ? formatShortId(matchedPayment.id).toLowerCase() : "";
+
+              const normRawId = normalizeForSearch(rawId);
+              const normReportId = normalizeForSearch(reportId);
+              const normPaymentRawId = normalizeForSearch(paymentRawId);
+              const normPaymentShortId = normalizeForSearch(paymentShortId);
+
+              const idMatch = rawId.includes(rawKw) ||
+                              reportId.includes(rawKw) ||
+                              paymentRawId.includes(rawKw) ||
+                              paymentShortId.includes(rawKw) ||
+                              (normKw.length > 0 && (
+                                normRawId.includes(normKw) ||
+                                normReportId.includes(normKw) ||
+                                normPaymentRawId.includes(normKw) ||
+                                normPaymentShortId.includes(normKw)
+                              ));
+
+              // NOTE: Customer name is intentionally NOT searched for online orders because the customer name was removed from the report.
+              // Searching customer name is reserved specifically for Reservations.
+              const itemsStr = typeof ord.items === "string" ? ord.items : JSON.stringify(ord.items || "");
+              const itemsMatch = itemsStr.toLowerCase().includes(rawKw);
+              const cancelReason = ord.cancellationReason || ord.cancelReason || ord.rejectionReason || ord.rejectReason || ord.reason || "";
+              const reasonMatch = String(cancelReason).toLowerCase().includes(rawKw);
+              const finalStatus = getRecordStatusLabel(ord, matchedPayment).toLowerCase();
+              const statusMatch = finalStatus.includes(rawKw) || (ord.status || "").toLowerCase().includes(rawKw);
+
+              if (!idMatch && !itemsMatch && !reasonMatch && !statusMatch) return false;
+            }
+            return true;
+          });
+
+          // 2. Filter Reservations & Advance Orders
+          filteredReservations = rawReservations.filter((res) => {
+            const ts = getItemTimestamp(res, "reservation");
+            if (startTs > 0 && ts > 0 && ts < startTs) return false;
+            if (endTs < Infinity && ts > 0 && ts > endTs) return false;
+
+            // Only Completed or Cancelled/Rejected reservations belong in the report
+            const s = (res.status || "").toLowerCase().trim();
+            const isCompleted = ["completed", "settled"].includes(s);
+            const isCancelled = ["cancelled", "rejected"].includes(s);
+
+            if (!isCompleted && !isCancelled) return false;
+
+            const matchedPayment = paymentsMap["res_" + res.id] || paymentsMap[res.id];
+            const isRejected = !isCompleted && isRecordRejected(res, matchedPayment);
+            const isCustomerCancelled = !isCompleted && !isRejected;
+
+            if (statusFilter === "completed" && !isCompleted) return false;
+            if (statusFilter === "cancelled" && !isCustomerCancelled) return false;
+            if (statusFilter === "rejected" && !isRejected) return false;
+
+            // Search keyword
+            if (searchKeyword) {
+              const rawKw = searchKeyword.toLowerCase();
+              const normKw = normalizeForSearch(searchKeyword);
+
+              const rawId = (res.id || "").toLowerCase();
+              const reportId = getReservationReportId(res).toLowerCase();
+              const paymentRawId = matchedPayment ? (matchedPayment.id || "").toLowerCase() : "";
+              const paymentShortId = matchedPayment ? formatShortId(matchedPayment.id).toLowerCase() : "";
+
+              const normRawId = normalizeForSearch(rawId);
+              const normReportId = normalizeForSearch(reportId);
+              const normPaymentRawId = normalizeForSearch(paymentRawId);
+              const normPaymentShortId = normalizeForSearch(paymentShortId);
+
+              const idMatch = rawId.includes(rawKw) ||
+                              reportId.includes(rawKw) ||
+                              paymentRawId.includes(rawKw) ||
+                              paymentShortId.includes(rawKw) ||
+                              (normKw.length > 0 && (
+                                normRawId.includes(normKw) ||
+                                normReportId.includes(normKw) ||
+                                normPaymentRawId.includes(normKw) ||
+                                normPaymentShortId.includes(normKw)
+                              ));
+
+              // Customer name IS searched for Reservations because customer name column exists in Reservations report
+              const nameMatch = (res.name || "").toLowerCase().includes(rawKw);
+              const notesStr = typeof res.notes === "string" ? res.notes : JSON.stringify(res.notes || "");
+              const notesMatch = notesStr.toLowerCase().includes(rawKw);
+              const tableMatch = String(res.tableSize || "").toLowerCase().includes(rawKw);
+              const cancelReason = res.cancellationReason || res.cancelReason || res.rejectionReason || res.rejectReason || res.reason || "";
+              const reasonMatch = String(cancelReason).toLowerCase().includes(rawKw);
+              const finalStatus = getRecordStatusLabel(res, matchedPayment).toLowerCase();
+              const statusMatch = finalStatus.includes(rawKw) || (res.status || "").toLowerCase().includes(rawKw);
+
+              if (!idMatch && !nameMatch && !notesMatch && !tableMatch && !reasonMatch && !statusMatch) return false;
+            }
+            return true;
+          });
+
+          // Sort descending: newest first
+          filteredOrders.sort((a, b) => getItemTimestamp(b, "order") - getItemTimestamp(a, "order"));
+          filteredReservations.sort((a, b) => getItemTimestamp(b, "reservation") - getItemTimestamp(a, "reservation"));
+
+          // Render tables
+          renderOnlineTable(filteredOrders);
+          renderReservationsTable(filteredReservations);
+
+          // Update Section Visibility & Tab highlights
+          applySectionVisibility(sectionFilter);
+
+          // Update KPIs based on active section
+          updateKpis(sectionFilter);
+
+          // Update Print Metadata
+          updatePrintMetadata(startDateVal, endDateVal, sectionFilter);
+
+        } catch (err) {
+          console.error("renderReport error:", err);
+        }
+      }
+
+      function renderOnlineTable(orders) {
+        const tbody = document.getElementById("onlineOrdersTableBody");
+        const countSpan = document.getElementById("onlineRowsCount");
+        const tabCount = document.getElementById("tabCountOnline");
+        const subtotalBadge = document.getElementById("onlineSectionSubtotal");
+        const footSubtotal = document.getElementById("onlineFootSubtotal");
+
+        if (countSpan) countSpan.innerText = orders.length;
+        if (tabCount) tabCount.innerText = orders.length;
+
+        if (orders.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">No completed or cancelled online orders found matching filters.</td></tr>`;
+          if (subtotalBadge) subtotalBadge.innerHTML = `Subtotal: ₱0.00 (0 items)`;
+          if (footSubtotal) footSubtotal.innerText = "₱0.00";
+          return;
+        }
+
+        let html = "";
+        let subtotal = 0;
+
+        orders.forEach((ord, index) => {
+          const ts = getItemTimestamp(ord, "order");
+          const dateStr = formatDate(ts);
+          const timeStr = formatTime(ts);
+
+          const s = (ord.status || "").toLowerCase().trim();
+          const isCompleted = ["claimed", "completed", "paid", "settled"].includes(s);
+
+          const matchedPayment = paymentsMap["order_" + ord.id] || paymentsMap[ord.id];
+          let amount = parseFloat(ord.total) || parseFloat(ord.totalAmount) || (matchedPayment ? parseFloat(matchedPayment.amount) : 0) || 0;
+
+          let statusBadge = "";
+          let amountCell = "";
+
+          const statusLabel = getRecordStatusLabel(ord, matchedPayment);
+
+          if (isCompleted) {
+            statusBadge = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Completed</span>';
+            subtotal += amount;
+            amountCell = `<span class="fw-bold text-dark">${formatPeso(amount)}</span>`;
+          } else if (statusLabel === "Rejected") {
+            statusBadge = '<span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>Rejected</span>';
+            amountCell = amount > 0 
+              ? `<span class="text-muted text-decoration-line-through small me-1">${formatPeso(amount)}</span><span class="badge bg-light text-danger border border-danger-subtle">₱0.00</span>` 
+              : '<span class="text-muted">₱0.00</span>';
+          } else {
+            statusBadge = '<span class="badge bg-secondary"><i class="fa-solid fa-ban me-1"></i>Cancelled</span>';
+            amountCell = amount > 0 
+              ? `<span class="text-muted text-decoration-line-through small me-1">${formatPeso(amount)}</span><span class="badge bg-light text-danger border border-danger-subtle">₱0.00</span>` 
+              : '<span class="text-muted">₱0.00</span>';
+          }
+
+          const cancelReason = ord.cancellationReason || ord.cancelReason || ord.rejectionReason || ord.rejectReason || ord.reason || "";
+          let reasonHtml = "";
+          if (!isCompleted && cancelReason) {
+            reasonHtml = `<div class="mt-1"><span class="badge bg-danger-subtle text-danger border border-danger-subtle text-wrap text-start" style="font-size: 0.72rem; max-width: 140px; line-height: 1.2;">Reason: ${escapeHtml(cancelReason)}</span></div>`;
+          }
+
+          const formattedItems = formatItemsList(ord.items);
+          const pickupFormatted = format12HourTimeStr(ord.pickupTime || "Standard");
+
+          html += `
+            <tr>
+              <td class="text-center text-muted">${index + 1}</td>
+              <td><strong class="font-monospace text-dark">${getOrderReportId(ord)}</strong></td>
+              <td><span>${dateStr}</span><br><small class="text-muted"><i class="fa-regular fa-clock me-1"></i>${timeStr}</small></td>
+              <td><div class="small" style="max-width: 320px; line-height: 1.4;">${formattedItems}</div></td>
+              <td><span class="badge bg-light text-dark border"><i class="fa-solid fa-clock me-1 text-primary"></i> ${pickupFormatted}</span></td>
+              <td class="text-center">${statusBadge}${reasonHtml}</td>
+              <td class="text-end">${amountCell}</td>
+            </tr>
+          `;
+        });
+
+        tbody.innerHTML = html;
+        if (subtotalBadge) subtotalBadge.innerHTML = `Subtotal: ${formatPeso(subtotal)} (${orders.length} items)`;
+        if (footSubtotal) footSubtotal.innerText = formatPeso(subtotal);
+      }
+
+      function renderReservationsTable(reservations) {
+        const tbody = document.getElementById("reservationsTableBody");
+        const countSpan = document.getElementById("reservationRowsCount");
+        const tabCount = document.getElementById("tabCountReservation");
+        const subtotalBadge = document.getElementById("reservationSectionSubtotal");
+        const footSubtotal = document.getElementById("reservationFootSubtotal");
+
+        if (countSpan) countSpan.innerText = reservations.length;
+        if (tabCount) tabCount.innerText = reservations.length;
+
+        if (reservations.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No completed or cancelled reservations found matching filters.</td></tr>`;
+          if (subtotalBadge) subtotalBadge.innerHTML = `Subtotal: ₱0.00 (0 items)`;
+          if (footSubtotal) footSubtotal.innerText = "₱0.00";
+          return;
+        }
+
+        let html = "";
+        let subtotal = 0;
+
+        reservations.forEach((res, index) => {
+          const ts = getItemTimestamp(res, "reservation");
+          const dateStr = res.date ? formatDate(ts) : "--";
+          const timeSlot = format12HourTimeStr(res.time || "Slot not set");
+
+          const s = (res.status || "").toLowerCase().trim();
+          const isCompleted = ["completed", "settled"].includes(s);
+
+          // Calculate paid amount from payment record or notes
+          let amount = 0;
+          const matchedPayment = paymentsMap["res_" + res.id] || paymentsMap[res.id];
+          if (matchedPayment && matchedPayment.amount) {
+            amount = parseFloat(matchedPayment.amount) || 0;
+          } else if (res.totalAmount) {
+            amount = parseFloat(res.totalAmount) || 0;
+          } else if (res.total) {
+            amount = parseFloat(res.total) || 0;
+          } else if (res.amount) {
+            amount = parseFloat(res.amount) || 0;
+          } else if (res.notes && String(res.notes).includes("₱")) {
+            const match = String(res.notes).match(/₱([\d,.]+)/);
+            if (match) amount = parseFloat(match[1].replace(/,/g, "")) || 0;
+          }
+
+          let statusBadge = "";
+          let amountCell = "";
+          const statusLabel = getRecordStatusLabel(res, matchedPayment);
+
+          if (isCompleted) {
+            statusBadge = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Completed</span>';
+            subtotal += amount;
+            amountCell = amount > 0 ? `<span class="fw-bold text-dark">${formatPeso(amount)}</span>` : '<span class="text-muted">₱0.00</span>';
+          } else if (statusLabel === "Rejected") {
+            statusBadge = '<span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>Rejected</span>';
+            amountCell = amount > 0 
+              ? `<span class="text-muted text-decoration-line-through small me-1">${formatPeso(amount)}</span><span class="badge bg-light text-danger border border-danger-subtle">₱0.00</span>` 
+              : '<span class="text-muted">₱0.00</span>';
+          } else {
+            statusBadge = '<span class="badge bg-secondary"><i class="fa-solid fa-ban me-1"></i>Cancelled</span>';
+            amountCell = amount > 0 
+              ? `<span class="text-muted text-decoration-line-through small me-1">${formatPeso(amount)}</span><span class="badge bg-light text-danger border border-danger-subtle">₱0.00</span>` 
+              : '<span class="text-muted">₱0.00</span>';
+          }
+
+          const cancelReason = res.cancellationReason || res.cancelReason || res.rejectionReason || res.rejectReason || res.reason || "";
+          let reasonHtml = "";
+          if (!isCompleted && cancelReason) {
+            reasonHtml = `<div class="mt-1"><span class="badge bg-danger-subtle text-danger border border-danger-subtle text-wrap text-start" style="font-size: 0.72rem; max-width: 140px; line-height: 1.2;">Reason: ${escapeHtml(cancelReason)}</span></div>`;
+          }
+
+          const typeBadge = res.type === "walk-in"
+            ? '<span class="badge bg-info text-dark">In-Store</span>'
+            : '<span class="badge bg-primary">Online</span>';
+
+          const formattedNotes = formatItemsList(res.notes || "Standard Dining (No Advance Items)");
+
+          html += `
+            <tr>
+              <td class="text-center text-muted">${index + 1}</td>
+              <td><strong class="font-monospace text-dark">${getReservationReportId(res)}</strong></td>
+              <td><strong>${dateStr}</strong><br><small class="text-muted"><i class="fa-regular fa-clock me-1"></i>${timeSlot}</small></td>
+              <td><strong>${res.name || "Guest"}</strong></td>
+              <td class="text-center">${typeBadge}</td>
+              <td><span><i class="fa-solid fa-chair me-1 text-muted"></i>${res.tableSize || "Table --"}</span><br><small class="text-muted">${res.pax || 1} Guests</small></td>
+              <td><div class="small" style="max-width: 300px; line-height: 1.4;">${formattedNotes}</div></td>
+              <td class="text-center">${statusBadge}${reasonHtml}</td>
+              <td class="text-end">${amountCell}</td>
+            </tr>
+          `;
+        });
+
+        tbody.innerHTML = html;
+        if (subtotalBadge) subtotalBadge.innerHTML = `Subtotal: ${formatPeso(subtotal)} (${reservations.length} items)`;
+        if (footSubtotal) footSubtotal.innerText = formatPeso(subtotal);
+      }
+
+      function updateKpis(section) {
+        let onlineSum = 0;
+        let onlineCompletedCount = 0;
+        filteredOrders.forEach((o) => {
+          const s = (o.status || "").toLowerCase().trim();
+          if (["claimed", "completed", "paid", "settled"].includes(s)) {
+            const matched = paymentsMap["order_" + o.id] || paymentsMap[o.id];
+            const val = parseFloat(o.total) || parseFloat(o.totalAmount) || (matched ? parseFloat(matched.amount) : 0) || 0;
+            onlineSum += val;
+            onlineCompletedCount++;
+          }
+        });
+
+        let resSum = 0;
+        let resCompletedCount = 0;
+        filteredReservations.forEach((r) => {
+          const s = (r.status || "").toLowerCase().trim();
+          if (["completed", "settled"].includes(s)) {
+            const matched = paymentsMap["res_" + r.id] || paymentsMap[r.id];
+            if (matched && matched.amount) resSum += parseFloat(matched.amount) || 0;
+            else if (r.totalAmount) resSum += parseFloat(r.totalAmount) || 0;
+            else if (r.total) resSum += parseFloat(r.total) || 0;
+            else if (r.amount) resSum += parseFloat(r.amount) || 0;
+            else if (r.notes && String(r.notes).includes("₱")) {
+              const m = String(r.notes).match(/₱([\d,.]+)/);
+              if (m) resSum += parseFloat(m[1].replace(/,/g, "")) || 0;
+            }
+            resCompletedCount++;
+          }
+        });
+
+        let displayedSales = 0;
+        let displayedCount = 0;
+        let completedCount = 0;
+
+        if (section === "online") {
+          displayedSales = onlineSum;
+          displayedCount = filteredOrders.length;
+          completedCount = onlineCompletedCount;
+          const titleEl = document.getElementById("kpiSalesTitle");
+          if (titleEl) titleEl.innerText = "Online Sales";
+        } else if (section === "reservation") {
+          displayedSales = resSum;
+          displayedCount = filteredReservations.length;
+          completedCount = resCompletedCount;
+          const titleEl = document.getElementById("kpiSalesTitle");
+          if (titleEl) titleEl.innerText = "Reservation Sales";
+        } else {
+          displayedSales = onlineSum + resSum;
+          displayedCount = filteredOrders.length + filteredReservations.length;
+          completedCount = onlineCompletedCount + resCompletedCount;
+          const titleEl = document.getElementById("kpiSalesTitle");
+          if (titleEl) titleEl.innerText = "Total Sales";
+        }
+
+        const avg = completedCount > 0 ? displayedSales / completedCount : 0;
+
+        const elTotRev = document.getElementById("kpiTotalRevenue");
+        if (elTotRev) elTotRev.innerText = formatPeso(displayedSales);
+        const elOnRev = document.getElementById("kpiOnlineRevenue");
+        if (elOnRev) elOnRev.innerText = formatPeso(onlineSum);
+        const elOnCnt = document.getElementById("kpiOnlineCount");
+        if (elOnCnt) elOnCnt.innerText = filteredOrders.length;
+        const elResRev = document.getElementById("kpiReservationRevenue");
+        if (elResRev) elResRev.innerText = formatPeso(resSum);
+        const elResCnt = document.getElementById("kpiReservationCount");
+        if (elResCnt) elResCnt.innerText = filteredReservations.length;
+        const elTotCnt = document.getElementById("kpiTotalCount");
+        if (elTotCnt) elTotCnt.innerText = displayedCount;
+        const elAvg = document.getElementById("kpiAvgOrderValue");
+        if (elAvg) elAvg.innerText = formatPeso(avg);
+      }
+
+      function updatePrintMetadata(startDateVal, endDateVal, sectionFilter) {
+        const now = new Date();
+        const nowStr = now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) +
+          " at " + now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+        const genTimeEl = document.getElementById("printGeneratedTime");
+        if (genTimeEl) genTimeEl.innerText = nowStr;
+
+        const auditEl = document.getElementById("printAuditDate");
+        if (auditEl) auditEl.innerText = now.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+        let periodText = "All Time Records";
+        if (startDateVal && endDateVal) {
+          periodText = `${formatDate(new Date(startDateVal + "T00:00:00").getTime())} to ${formatDate(new Date(endDateVal + "T23:59:59").getTime())}`;
+        } else if (startDateVal) {
+          periodText = `From ${formatDate(new Date(startDateVal + "T00:00:00").getTime())}`;
+        } else if (endDateVal) {
+          periodText = `Up to ${formatDate(new Date(endDateVal + "T23:59:59").getTime())}`;
+        }
+
+        const rangeEl = document.getElementById("printPeriodRange");
+        if (rangeEl) rangeEl.innerText = periodText;
+
+        let scopeText = "Consolidated Report (All Records)";
+        if (sectionFilter === "online") {
+          scopeText = "Online Pickup Orders Report";
+        } else if (sectionFilter === "reservation") {
+          scopeText = "Reservations & Advance Orders Report";
+        }
+
+        const scopeEl = document.getElementById("printScopeBadge");
+        if (scopeEl) scopeEl.innerText = scopeText;
+      }
+
+      function applySectionVisibility(section) {
+        const onlineCard = document.getElementById("onlineSectionCard");
+        const resCard = document.getElementById("reservationSectionCard");
+        const secSelect = document.getElementById("sectionFilter");
+
+        if (secSelect && secSelect.value !== section) {
+          secSelect.value = section;
+        }
+
+        const tabBtnAll = document.getElementById("tabBtnAll");
+        const tabBtnOnline = document.getElementById("tabBtnOnline");
+        const tabBtnReservation = document.getElementById("tabBtnReservation");
+
+        [tabBtnAll, tabBtnOnline, tabBtnReservation].forEach((b) => b?.classList.remove("active"));
+
+        if (section === "online") {
+          // Show ONLY Online
+          if (onlineCard) {
+            onlineCard.classList.remove("d-none", "section-hidden");
+            onlineCard.style.display = "block";
+          }
+          if (resCard) {
+            resCard.classList.add("d-none", "section-hidden");
+            resCard.style.display = "none";
+          }
+          tabBtnOnline?.classList.add("active");
+        } else if (section === "reservation") {
+          // Show ONLY Reservation
+          if (onlineCard) {
+            onlineCard.classList.add("d-none", "section-hidden");
+            onlineCard.style.display = "none";
+          }
+          if (resCard) {
+            resCard.classList.remove("d-none", "section-hidden");
+            resCard.style.display = "block";
+          }
+          tabBtnReservation?.classList.add("active");
+        } else {
+          // Show Both (Consolidated)
+          if (onlineCard) {
+            onlineCard.classList.remove("d-none", "section-hidden");
+            onlineCard.style.display = "block";
+          }
+          if (resCard) {
+            resCard.classList.remove("d-none", "section-hidden");
+            resCard.style.display = "block";
+          }
+          tabBtnAll?.classList.add("active");
+        }
+      }
+
+      // Explicit Tab Handlers
+      function setSection(sec) {
+        const select = document.getElementById("sectionFilter");
+        if (select) select.value = sec;
+        applySectionVisibility(sec);
+        updateKpis(sec);
+        updatePrintMetadata(
+          document.getElementById("startDateInput")?.value,
+          document.getElementById("endDateInput")?.value,
+          sec
+        );
+      }
+
+      window.setSectionView = function(sec) {
+        setSection(sec);
+      };
+
+      document.getElementById("tabBtnAll")?.addEventListener("click", () => setSection("all"));
+      document.getElementById("tabBtnOnline")?.addEventListener("click", () => setSection("online"));
+      document.getElementById("tabBtnReservation")?.addEventListener("click", () => setSection("reservation"));
+
+      // Dropdown & Input Change Handlers
+      document.getElementById("sectionFilter")?.addEventListener("change", (e) => {
+        setSection(e.target.value);
+      });
+
+      document.getElementById("startDateInput")?.addEventListener("change", renderReport);
+      document.getElementById("endDateInput")?.addEventListener("change", renderReport);
+      document.getElementById("statusFilter")?.addEventListener("change", renderReport);
+      document.getElementById("searchInput")?.addEventListener("input", renderReport);
+
+      // Quick Date Buttons
+      window.setQuickDate = function (range) {
+        const today = new Date();
+        const startInput = document.getElementById("startDateInput");
+        const endInput = document.getElementById("endDateInput");
+
+        const toYYYYMMDD = (d) => {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${year}-${month}-${day}`;
+        };
+
+        document.querySelectorAll(".date-pill").forEach((b) => {
+          if (b.getAttribute("data-range") === range) {
+            b.classList.add("active");
+          } else {
+            b.classList.remove("active");
+          }
+        });
+
+        if (range === "today") {
+          startInput.value = toYYYYMMDD(today);
+          endInput.value = toYYYYMMDD(today);
+        } else if (range === "yesterday") {
+          const yest = new Date(today);
+          yest.setDate(yest.getDate() - 1);
+          startInput.value = toYYYYMMDD(yest);
+          endInput.value = toYYYYMMDD(yest);
+        } else if (range === "thisWeek") {
+          const startOfWeek = new Date(today);
+          startOfWeek.setDate(today.getDate() - today.getDay());
+          startInput.value = toYYYYMMDD(startOfWeek);
+          endInput.value = toYYYYMMDD(today);
+        } else if (range === "thisMonth") {
+          const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          startInput.value = toYYYYMMDD(startOfMonth);
+          endInput.value = toYYYYMMDD(today);
+        } else if (range === "allTime") {
+          startInput.value = "";
+          endInput.value = "";
+        }
+
+        renderReport();
+      };
+
+      document.querySelectorAll(".date-pill").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const range = e.currentTarget.getAttribute("data-range");
+          window.setQuickDate(range);
+        });
+      });
+
+      // Reset Button
+      window.resetAllFilters = function () {
+        document.getElementById("sectionFilter").value = "all";
+        document.getElementById("startDateInput").value = "";
+        document.getElementById("endDateInput").value = "";
+        document.getElementById("statusFilter").value = "all";
+        document.getElementById("searchInput").value = "";
+
+        document.querySelectorAll(".date-pill").forEach((b) => b.classList.remove("active"));
+        document.getElementById("btnAllTime")?.classList.add("active");
+
+        setSection("all");
+        renderReport();
+      };
+
+      document.getElementById("btnResetFilters")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        window.resetAllFilters();
+      });
+
+      // Print Report Handler
+      window.triggerPrint = function () {
+        const sec = document.getElementById("sectionFilter")?.value || "all";
+        applySectionVisibility(sec);
+        window.print();
+      };
+
+      document.getElementById("btnPrintReport")?.addEventListener("click", () => {
+        window.triggerPrint();
+      });
+
+      // CSV Export Handler
+      window.exportToCSV = function () {
+        const section = document.getElementById("sectionFilter")?.value || "all";
+        let csvRows = [];
+
+        csvRows.push(["TOM'S CHICKEN HOUSE - SALES & ORDER REPORT"]);
+        csvRows.push(["Branch", "San Jose Branch"]);
+        csvRows.push(["Generated on", new Date().toLocaleString()]);
+        csvRows.push(["Period", document.getElementById("printPeriodRange")?.innerText || "All Time"]);
+        csvRows.push(["Scope", document.getElementById("printScopeBadge")?.innerText || "Consolidated Report"]);
+        csvRows.push([]);
+
+        // 1. Online Orders
+        if (section === "all" || section === "online") {
+          csvRows.push(["--- ONLINE PICKUP ORDERS ---"]);
+          csvRows.push(["Order ID", "Date", "Time", "Items Ordered", "Pickup Time", "Status", "Cancellation / Rejection Reason", "Amount Paid (PHP)"]);
+          filteredOrders.forEach((o) => {
+            const ts = getItemTimestamp(o, "order");
+            const s = (o.status || "").toLowerCase().trim();
+            const isCompleted = ["claimed", "completed", "paid", "settled"].includes(s);
+            const matchedPayment = paymentsMap["order_" + o.id] || paymentsMap[o.id];
+            const amount = parseFloat(o.total) || parseFloat(o.totalAmount) || (matchedPayment ? parseFloat(matchedPayment.amount) : 0) || 0;
+            const cancelReason = o.cancellationReason || o.cancelReason || o.rejectionReason || o.rejectReason || o.reason || "";
+            csvRows.push([
+              getOrderReportId(o),
+              formatDate(ts),
+              formatTime(ts),
+              formatItemsForCSV(o.items),
+              format12HourTimeStr(o.pickupTime || "Standard"),
+              getRecordStatusLabel(o, matchedPayment),
+              cancelReason,
+              isCompleted ? amount : 0,
+            ]);
+          });
+          csvRows.push([]);
+        }
+
+        // 2. Reservations & Advance Orders
+        if (section === "all" || section === "reservation") {
+          csvRows.push(["--- RESERVATIONS & ADVANCE ORDERS ---"]);
+          csvRows.push(["Booking ID", "Date", "Time Slot", "Customer Name", "Type", "Table & Pax", "Advance Order / Notes", "Status", "Cancellation / Rejection Reason", "Amount Paid (PHP)"]);
+          filteredReservations.forEach((r) => {
+            const ts = getItemTimestamp(r, "reservation");
+            const s = (r.status || "").toLowerCase().trim();
+            const isCompleted = ["completed", "settled"].includes(s);
+            let amount = 0;
+            const matched = paymentsMap["res_" + r.id] || paymentsMap[r.id];
+            if (matched && matched.amount) amount = parseFloat(matched.amount) || 0;
+            else if (r.totalAmount) amount = parseFloat(r.totalAmount) || 0;
+            else if (r.total) amount = parseFloat(r.total) || 0;
+            else if (r.amount) amount = parseFloat(r.amount) || 0;
+            const cancelReason = r.cancellationReason || r.cancelReason || r.rejectionReason || r.rejectReason || r.reason || "";
+
+            csvRows.push([
+              getReservationReportId(r),
+              r.date || formatDate(ts),
+              format12HourTimeStr(r.time || "Standard Slot"),
+              r.name || "Guest",
+              r.type || "online",
+              `${r.tableSize || ""} (${r.pax || 1} Pax)`,
+              formatItemsForCSV(r.notes),
+              getRecordStatusLabel(r, matched),
+              cancelReason,
+              isCompleted ? amount : 0,
+            ]);
+          });
+          csvRows.push([]);
+        }
+
+        const csvText = csvRows.map((e) => e.map((val) => `"${String(val ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+        const blob = new Blob(["\uFEFF" + csvText], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `TomsChicken_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      };
+
+      document.getElementById("btnExportCSV")?.addEventListener("click", () => {
+        window.exportToCSV();
+      });
+
+      // Initial render
+      renderReport();
+    </script>
+  </body>
+</html>

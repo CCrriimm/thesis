@@ -405,6 +405,77 @@
         let pendingCancelTime = null;
         let pendingCancelTable = null;
         let customerCancelModalInstance = null;
+        let cachedOrders = [];
+
+        function getOrderPickupTimestamp(order) {
+            if (!order) return null;
+            const timeStr = String(order.rawPickupTime || order.pickupTime || "").trim();
+            if (!timeStr) return null;
+
+            const orderDate = new Date(order.timestamp || Date.now());
+            let hours = 0;
+            let minutes = 0;
+
+            const match12 = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+            if (match12) {
+                hours = parseInt(match12[1], 10);
+                minutes = parseInt(match12[2], 10);
+                const ampm = match12[3] ? match12[3].toUpperCase() : null;
+                if (ampm === "PM" && hours < 12) hours += 12;
+                if (ampm === "AM" && hours === 12) hours = 0;
+            } else {
+                return null;
+            }
+
+            const pickupDate = new Date(
+                orderDate.getFullYear(),
+                orderDate.getMonth(),
+                orderDate.getDate(),
+                hours,
+                minutes,
+                0
+            );
+
+            if (pickupDate.getTime() < orderDate.getTime() - 1000 * 60 * 60 * 2) {
+                pickupDate.setDate(pickupDate.getDate() + 1);
+            }
+
+            return pickupDate.getTime();
+        }
+
+        function checkOrderCancelEligibility(order) {
+            if (!order) return { canCancel: false, reason: "Order not found." };
+            if (order.status === "cancelled" || order.status === "rejected" || order.status === "claimed") {
+                return { canCancel: false, reason: "Order is already finalized." };
+            }
+            if (order.status === "pending") {
+                return { canCancel: true, minutesLeft: 999 };
+            }
+
+            // Once approved/confirmed or preparing:
+            if (order.status === "approved" || order.status === "preparing") {
+                const pickupTs = getOrderPickupTimestamp(order);
+                if (!pickupTs) {
+                    return { canCancel: true, minutesLeft: 999 };
+                }
+                const now = Date.now();
+                const diffMinutes = (pickupTs - now) / (1000 * 60);
+
+                if (diffMinutes > 20) {
+                    return { canCancel: true, minutesLeft: Math.round(diffMinutes) };
+                } else if (diffMinutes <= 0) {
+                    return { canCancel: false, isLocked: true, reason: "Scheduled pickup time has already passed." };
+                } else {
+                    return { 
+                        canCancel: false, 
+                        isLocked: true,
+                        reason: "Cancellations and refunds are only permitted at least 20 minutes before pickup time. Kitchen preparation is underway." 
+                    };
+                }
+            }
+
+            return { canCancel: false, reason: "Orders that are ready or claimed cannot be cancelled." };
+        }
 
         document.querySelectorAll('input[name="custCancelReasonRadio"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
@@ -420,6 +491,17 @@
         });
 
         window.openCustomerCancel = function(type, id, date = null, time = null, tableSize = null) {
+            if (type === 'order') {
+                const ord = cachedOrders.find(o => o.id === id);
+                if (ord) {
+                    const check = checkOrderCancelEligibility(ord);
+                    if (!check.canCancel) {
+                        alert(check.reason || "This order cannot be cancelled because it is within 20 minutes of pickup time.");
+                        return;
+                    }
+                }
+            }
+
             pendingCancelType = type;
             pendingCancelId = id;
             pendingCancelDate = date;
@@ -513,6 +595,20 @@
                         console.warn("Could not sync payment cancellation:", pErr);
                     }
                 } else if (pendingCancelType === 'order') {
+                    const ord = cachedOrders.find(o => o.id === pendingCancelId);
+                    if (ord) {
+                        const check = checkOrderCancelEligibility(ord);
+                        if (!check.canCancel) {
+                            if (errAlert) {
+                                errAlert.textContent = check.reason || "Cancellations are locked within 20 minutes of pickup time.";
+                                errAlert.classList.remove('d-none');
+                            }
+                            btn.disabled = false;
+                            btn.innerHTML = 'Confirm Cancellation';
+                            return;
+                        }
+                    }
+
                     await update(ref(db, `orders/${pendingCancelId}`), {
                         status: 'cancelled',
                         rejectionReason: finalReason,
@@ -661,6 +757,7 @@
                     });
 
                     myOrders.sort((a,b) => b.timestamp - a.timestamp);
+                    cachedOrders = myOrders;
 
                     myOrders.forEach(o => {
                         hasData = true;
@@ -689,12 +786,29 @@
                         }
 
                         let orderCancelBtn = "";
-                        if (o.status === "pending") {
+                        const cancelCheck = checkOrderCancelEligibility(o);
+
+                        if (cancelCheck.canCancel) {
+                            const noteText = o.status === "pending" 
+                                ? "Pending confirmation" 
+                                : "Cancel allowed >20m before pickup";
                             orderCancelBtn = `
-                                <div class="mt-2 pt-2 border-top d-flex justify-content-end">
-                                    <button type="button" onclick="openCustomerCancel('order', '${o.id}')" class="btn btn-sm btn-outline-danger">
+                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                                    <small class="text-muted" style="font-size:0.75rem;">
+                                        <i class="fa-solid fa-clock-rotate-left me-1 text-primary"></i> ${noteText}
+                                    </small>
+                                    <button type="button" onclick="openCustomerCancel('order', '${o.id}')" class="btn btn-sm btn-outline-danger fw-bold">
                                         <i class="fa-solid fa-ban me-1"></i> Cancel Order
                                     </button>
+                                </div>
+                            `;
+                        } else if (cancelCheck.isLocked) {
+                            orderCancelBtn = `
+                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-light text-danger border border-danger-subtle py-1 px-2 small">
+                                        <i class="fa-solid fa-lock me-1"></i> Cancellation locked (&lt; 20m to pickup)
+                                    </span>
+                                    <small class="text-muted" style="font-size:0.72rem;">Preparation underway</small>
                                 </div>
                             `;
                         }

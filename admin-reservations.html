@@ -168,6 +168,7 @@
         <li><a href="admin-tables.html"><i class="fa-solid fa-chair"></i> Tables</a></li>
         <li><a href="admin-reservations.html" class="active"><i class="fa-solid fa-calendar-check"></i> Reservations</a></li>
         <li><a href="kitchen.html"><i class="fa-solid fa-fire-burner"></i> Kitchen</a></li>
+        <li><a href="admin-reports.html"><i class="fa-solid fa-chart-line"></i> Reports</a></li>
         <li><a href="admin-users.html"><i class="fa-solid fa-user-shield"></i> Admins</a></li>
         <li class="mt-5"><a href="#" id="adminLogoutBtn" class="text-danger"><i class="fa-solid fa-right-from-bracket"></i> Logout</a></li>
       </ul>
@@ -398,21 +399,21 @@
                   3. Table / Floor Maintenance or Operational Issue
                 </label>
               </div>
-              <div class="form-check p-2 bg-white rounded border mb-2">
+              <div class="form-check p-2 bg-white rounded border mb-2" id="rcReason4Wrap">
                 <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason4" value="Invalid / Unverified Downpayment Receipt">
-                <label class="form-check-label fw-bold small" for="rcReason4">
+                <label class="form-check-label fw-bold small" id="rcReason4Label" for="rcReason4">
                   4. Invalid / Unverified Downpayment Receipt
                 </label>
               </div>
               <div class="form-check p-2 bg-white rounded border mb-2">
                 <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReason5" value="Duplicate Booking / Incorrect Party Size or Floor">
-                <label class="form-check-label fw-bold small" for="rcReason5">
+                <label class="form-check-label fw-bold small" id="rcReason5Label" for="rcReason5">
                   5. Duplicate Booking / Incorrect Party Size or Floor
                 </label>
               </div>
               <div class="form-check p-2 bg-white rounded border mb-2">
                 <input class="form-check-input ms-0 me-2" type="radio" name="resCancelReasonRadio" id="rcReasonOther" value="Others">
-                <label class="form-check-label fw-bold small" for="rcReasonOther">
+                <label class="form-check-label fw-bold small" id="rcReasonOtherLabel" for="rcReasonOther">
                   6. Others (Please specify below)
                 </label>
               </div>
@@ -638,6 +639,33 @@
 
         if (newStatus === "cancelled") {
           // Open dedicated cancellation reason modal
+          const resObj = allRes.find((r) => r.id === id);
+          const isWalkIn = resObj && (resObj.type === "walk-in" || resObj.type === "in-store");
+          const rc4Wrap = document.getElementById("rcReason4Wrap");
+          const rc4Input = document.getElementById("rcReason4");
+          const rc4Label = document.getElementById("rcReason4Label");
+          const rc5Label = document.getElementById("rcReason5Label");
+          const rcOtherLabel = document.getElementById("rcReasonOtherLabel");
+
+          if (isWalkIn) {
+            // For in-store reservations, guests pay at counter so unverified downpayment does not apply.
+            // Customer cancellation is already handled by option 2. Hide option 4 and renumber cleanly.
+            if (rc4Wrap) rc4Wrap.classList.add("d-none");
+            if (rc4Input) rc4Input.disabled = true;
+            if (rc5Label) rc5Label.innerText = "4. Duplicate Booking / Incorrect Party Size or Floor";
+            if (rcOtherLabel) rcOtherLabel.innerText = "5. Others (Please specify below)";
+          } else {
+            // Online reservations have downpayment receipts requiring verification
+            if (rc4Wrap) rc4Wrap.classList.remove("d-none");
+            if (rc4Input) {
+              rc4Input.disabled = false;
+              rc4Input.value = "Invalid / Unverified Downpayment Receipt";
+            }
+            if (rc4Label) rc4Label.innerText = "4. Invalid / Unverified Downpayment Receipt";
+            if (rc5Label) rc5Label.innerText = "5. Duplicate Booking / Incorrect Party Size or Floor";
+            if (rcOtherLabel) rcOtherLabel.innerText = "6. Others (Please specify below)";
+          }
+
           const errAlert = document.getElementById("cancelErrorAlert");
           if (errAlert) errAlert.classList.add("d-none");
           document.getElementById("resCustomReasonWrap").classList.add("d-none");
