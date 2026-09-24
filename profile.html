@@ -464,11 +464,17 @@
                 if (diffMinutes > 20) {
                     return { canCancel: true, minutesLeft: Math.round(diffMinutes) };
                 } else if (diffMinutes <= 0) {
-                    return { canCancel: false, isLocked: true, reason: "Scheduled pickup time has already passed." };
+                    return { 
+                        canCancel: false, 
+                        isLocked: true, 
+                        subtext: "Pickup time reached", 
+                        reason: "Scheduled pickup time has already passed." 
+                    };
                 } else {
                     return { 
                         canCancel: false, 
-                        isLocked: true,
+                        isLocked: true, 
+                        subtext: "Under 20m to pickup", 
                         reason: "Cancellations and refunds are only permitted at least 20 minutes before pickup time. Kitchen preparation is underway." 
                     };
                 }
@@ -803,12 +809,17 @@
                                 </div>
                             `;
                         } else if (cancelCheck.isLocked) {
+                            const lockSubtext = cancelCheck.subtext || "Under 20m to pickup";
                             orderCancelBtn = `
-                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
-                                    <span class="badge bg-light text-danger border border-danger-subtle py-1 px-2 small">
-                                        <i class="fa-solid fa-lock me-1"></i> Cancellation locked (&lt; 20m to pickup)
-                                    </span>
-                                    <small class="text-muted" style="font-size:0.72rem;">Preparation underway</small>
+                                <div class="mt-2 pt-2 border-top">
+                                    <div class="p-2 rounded-3 text-center" style="background-color: #fff8ee; border: 1px solid #fbd38d;">
+                                        <div class="d-inline-flex align-items-center justify-content-center gap-1 px-3 py-1 rounded-pill bg-warning text-dark fw-bold mb-1 shadow-sm" style="font-size: 0.76rem; letter-spacing: 0.4px;">
+                                            <i class="fa-solid fa-fire-burner text-danger me-1"></i> PREPARATION UNDERWAY
+                                        </div>
+                                        <div class="text-danger fw-semibold" style="font-size: 0.73rem;">
+                                            <i class="fa-solid fa-lock me-1"></i> Cancellation locked &bull; ${lockSubtext}
+                                        </div>
+                                    </div>
                                 </div>
                             `;
                         }
