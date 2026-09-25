@@ -566,7 +566,7 @@
   </footer>
 
   <script type="module">
-      import { auth, onAuthStateChanged, signOut } from "./js/firebase-config.js";
+      import { auth, db, ref, get, onAuthStateChanged, signOut } from "./js/firebase-config.js";
 
       const authSection = document.getElementById("authSection");
       const authSectionMobile = document.getElementById("authSectionMobile");
@@ -574,9 +574,31 @@
 
       let currentUser = null;
 
-      onAuthStateChanged(auth, (user) => {
+      // Redirect admins away from customer about page
+      window.addEventListener("pageshow", async () => {
+          if (auth.currentUser) {
+              try {
+                  const snap = await get(ref(db, "users/" + auth.currentUser.uid));
+                  if (snap.exists() && snap.val().role === "admin") {
+                      window.location.replace("admin.html");
+                  }
+              } catch (e) {}
+          }
+      });
+
+      onAuthStateChanged(auth, async (user) => {
           currentUser = user;
           if (user) {
+              try {
+                  const snap = await get(ref(db, "users/" + user.uid));
+                  if (snap.exists() && snap.val().role === "admin") {
+                      window.location.replace("admin.html");
+                      return;
+                  }
+              } catch (e) {
+                  console.error("Auth check error:", e);
+              }
+
               const firstLetter = user.email.charAt(0).toUpperCase();
 
                 // Desktop: Profile circle

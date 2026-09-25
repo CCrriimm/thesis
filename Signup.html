@@ -288,12 +288,29 @@
         ref, 
         set, 
         get,
+        onAuthStateChanged,
         RecaptchaVerifier,
         signInWithPhoneNumber,
         linkWithCredential,
         EmailAuthProvider,
         updateProfile
       } from "./js/firebase-config.js";
+
+      // If user is already logged in, redirect them away from signup
+      onAuthStateChanged(auth, async (user) => {
+        if (user && !pendingRegistration) {
+          try {
+            const snap = await get(ref(db, "users/" + user.uid));
+            if (snap.exists() && snap.val().role === "admin") {
+              window.location.replace("admin.html");
+            } else {
+              window.location.replace("index.html");
+            }
+          } catch (e) {
+            window.location.replace("index.html");
+          }
+        }
+      });
 
       const form = document.getElementById("signupForm");
       const pass1 = document.getElementById("password");
@@ -588,7 +605,7 @@
 
       // Redirect button inside success modal
       document.getElementById("regSuccessOkBtn").addEventListener("click", () => {
-        window.location.href = "index.html";
+        window.location.replace("index.html");
       });
 
       function startResendCooldown() {

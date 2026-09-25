@@ -270,26 +270,46 @@
             return phone.substring(0, 3) + '*'.repeat(phone.length - 6) + phone.substring(phone.length - 3);
         }
 
+        // Redirect admins away from customer profile
+        window.addEventListener("pageshow", async () => {
+            if (auth.currentUser) {
+                try {
+                    const snap = await get(ref(db, "users/" + auth.currentUser.uid));
+                    if (snap.exists() && snap.val().role === "admin") {
+                        window.location.replace("admin.html");
+                    }
+                } catch (e) {}
+            }
+        });
+
         // 1. SECURITY & PROFILE LOAD
         onAuthStateChanged(auth, async (user) => {
             if (!user) {
-                window.location.href = "login.html";
+                window.location.replace("login.html");
             } else {
                 currentUserUid = user.uid;
                 
-                const snap = await get(ref(db, 'users/' + user.uid));
-                if (snap.exists()) {
-                    const data = snap.val();
-                    rawData.firstName = data.firstName || "";
-                    rawData.lastName = data.lastName || "";
-                    rawData.email = data.email || "";
-                    rawData.phone = data.phone || "N/A"; // fallback if phone isn't in DB yet
-                    
-                    updateProfileUI();
+                try {
+                    const snap = await get(ref(db, 'users/' + user.uid));
+                    if (snap.exists()) {
+                        const data = snap.val();
+                        if (data.role === "admin") {
+                            window.location.replace("admin.html");
+                            return;
+                        }
+                        rawData.firstName = data.firstName || "";
+                        rawData.lastName = data.lastName || "";
+                        rawData.email = data.email || "";
+                        rawData.phone = data.phone || "N/A"; // fallback if phone isn't in DB yet
+                        
+                        updateProfileUI();
 
-                    // Start fetching their records
-                    loadMyReservations();
-                    loadMyOrders();
+                        // Start fetching their records
+                        loadMyReservations();
+                        loadMyOrders();
+                    }
+                } catch (e) {
+                    console.error("Profile auth load error:", e);
                 }
             }
         });

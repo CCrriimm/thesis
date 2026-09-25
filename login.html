@@ -64,7 +64,19 @@
     >
       <source src="Media/ChickenBG.mp4" type="video/mp4" />
     </video>
-    <div class="card login-card shadow-lg border-0">
+    <!-- Session Checking Card (Visible by default while checking auth state) -->
+    <div id="sessionCheckCard" class="card login-card shadow-lg border-0 text-center p-4">
+      <div class="card-body py-4">
+        <div class="spinner-border mx-auto mb-3" style="color: #f57d10ff; width: 2.75rem; height: 2.75rem;" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <h5 class="fw-bold mb-1" id="sessionStatusTitle">Checking session...</h5>
+        <small class="text-muted" id="sessionStatusMsg">Verifying authentication status</small>
+      </div>
+    </div>
+
+    <!-- Login Card (Hidden initially, shown only when unauthenticated) -->
+    <div class="card login-card shadow-lg border-0" id="loginCard" style="display: none;">
       <div
         class="card-header text-white text-center py-4"
         style="background-color: #f57d10ff"
@@ -144,38 +156,120 @@
         ref,
         get,
         signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut,
         RecaptchaVerifier
       } from "./js/firebase-config.js";
 
+      const sessionCheckCard = document.getElementById("sessionCheckCard");
+      const loginCard = document.getElementById("loginCard");
+      const sessionStatusTitle = document.getElementById("sessionStatusTitle");
+      const sessionStatusMsg = document.getElementById("sessionStatusMsg");
       const loginForm = document.getElementById("loginForm");
       const errorAlert = document.getElementById("error-alert");
       const loginBtn = document.getElementById("loginBtn");
 
       let recaptchaWidgetId = null;
       let recaptchaResponseToken = null;
+      let recaptchaInitialized = false;
+      let isRedirecting = false;
 
-      // Initialize reCAPTCHA v2 checkbox for bot protection on Login
-      try {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-          size: "normal",
-          callback: (response) => {
-            recaptchaResponseToken = response;
-            errorAlert.classList.add("d-none");
-          },
-          "expired-callback": () => {
-            recaptchaResponseToken = null;
-            showError("reCAPTCHA expired. Please verify the checkbox again.");
-          }
-        });
-
-        window.recaptchaVerifier.render().then((widgetId) => {
-          recaptchaWidgetId = widgetId;
-        }).catch((err) => {
-          console.error("Login reCAPTCHA render error:", err);
-        });
-      } catch (err) {
-        console.error("RecaptchaVerifier initialization error:", err);
+      function showLoginForm() {
+        if (isRedirecting) return;
+        if (sessionCheckCard) sessionCheckCard.style.display = "none";
+        if (loginCard) loginCard.style.display = "block";
+        initRecaptcha();
       }
+
+      function initRecaptcha() {
+        if (recaptchaInitialized) return;
+        recaptchaInitialized = true;
+        // Initialize reCAPTCHA v2 checkbox for bot protection on Login
+        try {
+          window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+            size: "normal",
+            callback: (response) => {
+              recaptchaResponseToken = response;
+              errorAlert.classList.add("d-none");
+            },
+            "expired-callback": () => {
+              recaptchaResponseToken = null;
+              showError("reCAPTCHA expired. Please verify the checkbox again.");
+            }
+          });
+
+          window.recaptchaVerifier.render().then((widgetId) => {
+            recaptchaWidgetId = widgetId;
+          }).catch((err) => {
+            console.error("Login reCAPTCHA render error:", err);
+          });
+        } catch (err) {
+          console.error("RecaptchaVerifier initialization error:", err);
+        }
+      }
+
+      async function redirectLoggedInUser(user) {
+        if (isRedirecting) return;
+        isRedirecting = true;
+
+        if (sessionCheckCard) {
+          sessionCheckCard.style.display = "block";
+          if (sessionStatusTitle) sessionStatusTitle.textContent = "Already Logged In";
+          if (sessionStatusMsg) sessionStatusMsg.textContent = "Redirecting to your dashboard...";
+        }
+        if (loginCard) loginCard.style.display = "none";
+
+        try {
+          const userRef = ref(db, "users/" + user.uid);
+          const snapshot = await get(userRef);
+          if (snapshot.exists()) {
+            const userData = snapshot.val();
+            if (userData.role === "admin") {
+              if (userData.status === "active") {
+                window.location.replace("admin.html");
+                return;
+              } else {
+                isRedirecting = false;
+                await signOut(auth);
+                showLoginForm();
+                showError("Access Denied: Your admin account has been deactivated.");
+                return;
+              }
+            } else if (userData.role === "customer") {
+              window.location.replace("index.html");
+              return;
+            }
+          }
+          window.location.replace("index.html");
+        } catch (err) {
+          console.error("Session verification error:", err);
+          isRedirecting = false;
+          showLoginForm();
+        }
+      }
+
+      // Check if user is already logged in on initial load
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          redirectLoggedInUser(user);
+        } else {
+          showLoginForm();
+        }
+      });
+
+      // Handle Back-Forward Cache (BFCache) when navigating back
+      window.addEventListener("pageshow", (event) => {
+        if (auth.currentUser) {
+          redirectLoggedInUser(auth.currentUser);
+        }
+      });
+
+      // Safety fallback in case network/auth stalls
+      setTimeout(() => {
+        if (!auth.currentUser && !isRedirecting) {
+          showLoginForm();
+        }
+      }, 3000);
 
       document.getElementById("togglePassword").addEventListener("click", function () {
         const passwordInput = document.getElementById("password");
@@ -234,14 +328,14 @@
             const userData = snapshot.val(); // Gets user data (email, role, status) from the database
             if (userData.role === "admin") {
               if (userData.status === "active") {
-                window.location.href = "admin.html";
+                window.location.replace("admin.html");
               } else {
                 showError(
                   "Access Denied: Your admin account has been deactivated.",
                 );
               }
             } else if (userData.role === "customer") {
-              window.location.href = "index.html";
+              window.location.replace("index.html");
             } else {
               showError("Error: Account role not defined.");
             }
