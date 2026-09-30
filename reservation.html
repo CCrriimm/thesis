@@ -440,13 +440,13 @@
                       <option value="" disabled selected>
                         Select an available slot...
                       </option>
-                      <option value="8:00 AM - 11:00 AM">8:00 AM - 11:00 AM</option>
                       <option value="11:00 AM - 2:00 PM">11:00 AM - 2:00 PM</option>
                       <option value="2:00 PM - 5:00 PM">2:00 PM - 5:00 PM</option>
                       <option value="5:00 PM - 8:00 PM">5:00 PM - 8:00 PM</option>
+                      <option value="8:00 PM - 10:00 PM">8:00 PM - 10:00 PM</option>
                     </select>
                     <small class="text-muted" style="font-size: 0.72rem"
-                      >Limited to 2 reservations per time slot.</small
+                      >Operating hours: 11:00 AM – 10:00 PM</small
                     >
                   </div>
 
@@ -1016,7 +1016,7 @@
       let currentMonth = currentDate.getMonth();
       let currentYear = currentDate.getFullYear();
 
-      // This object will track limits: reservationData["2026-05-27"]["8:00 AM - 11:00 AM"] = count
+      // This object will track limits: reservationData["2026-05-27"]["11:00 AM - 2:00 PM"] = count
       let reservationData = {};
       const TOTAL_TABLES = 13;
 

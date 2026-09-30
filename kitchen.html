@@ -342,7 +342,7 @@
       let activeReservations = [];
       let activeRefills = [];
 
-      // Helper to parse any time string ("14:30", "2:30 PM", "8:00 AM - 11:00 AM") into hours and minutes
+      // Helper to parse any time string ("14:30", "2:30 PM", "11:00 AM - 2:00 PM") into hours and minutes
       function parseTimeTo24(timeStr) {
         if (!timeStr) return { hours: 0, minutes: 0 };
         let clean = timeStr.trim();

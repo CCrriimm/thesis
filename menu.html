@@ -213,7 +213,10 @@
             <form id="checkoutForm">
               <div class="mb-3">
                 <label class="form-label fw-bold small">Pickup Time</label>
-                <input type="time" id="pickupTime" class="form-control" required />
+                <input type="time" id="pickupTime" class="form-control" min="11:00" max="22:00" required />
+                <small class="text-muted d-block mt-1" style="font-size: 0.74rem;">
+                  <i class="fa-regular fa-clock me-1 text-primary"></i> Operating hours: <b>11:00 AM – 10:00 PM</b>
+                </small>
               </div>
               <div class="payment-box mb-4 text-center">
                 <h6 class="fw-bold text-dark mb-1">Pay via GCash / PayMaya</h6>
@@ -720,6 +723,12 @@
 
         if (!rawPickupTime) {
           showCheckoutError("Please specify a pickup time.");
+          return;
+        }
+
+        // Validate pickup time within operating hours (11:00 AM to 10:00 PM)
+        if (rawPickupTime < "11:00" || rawPickupTime > "22:00") {
+          showCheckoutError("Pickup time must be between 11:00 AM and 10:00 PM (store operating hours).");
           return;
         }
 
