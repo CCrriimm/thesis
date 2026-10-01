@@ -7,6 +7,7 @@
 
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
+    <script src="js/session-guard.js"></script>
 
     <style>
       :root { --toms-orange: #f57d10ff; --toms-dark: #212529; }
@@ -163,7 +164,7 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top">
       <div class="container mobile-container py-0">
         <a class="navbar-brand fw-bold fs-4" href="index.html" style="color: var(--toms-orange)">
-          <i class="fa-solid fa-arrow-left text-dark me-2" onclick="history.back(); return false;"></i> Tom's<span class="text-dark">Chicken</span>
+          <i class="fa-solid fa-arrow-left text-dark me-2" onclick="history.back(); return false;"></i> Tom's <span class="text-dark">Chicken</span>
         </a>
       </div>
     </nav>
@@ -228,7 +229,7 @@
               </div>
               <div class="mb-4">
                 <label class="form-label fw-bold small">Upload Payment Receipt</label>
-                <input type="file" id="orderReceipt" class="form-control" accept="image/*" required />
+                <input type="file" id="orderReceipt" class="form-control" accept="image/png, image/jpeg, image/jpg, image/webp" required />
               </div>
 
               <!-- Cancellation & Refund Policy Notice -->
@@ -335,20 +336,26 @@
           updateCartUI();
       });
 
-      // Auth Check
+      // Auth Check & Session Sync
+      currentUserName = sessionStorage.getItem("toms_user_name") || "";
       onAuthStateChanged(auth, async (user) => {
         if (!user) { 
+          if (window.clearUserSession) window.clearUserSession();
           window.location.replace("login.html"); 
           return;
         } 
         try {
           const snap = await get(ref(db, "users/" + user.uid));
           if (snap.exists()) {
-            if (snap.val().role === "admin") {
+            const val = snap.val();
+            if (val.role === "admin") {
               window.location.replace("admin.html");
               return;
             }
-            currentUserName = `${snap.val().firstName} ${snap.val().lastName}`;
+            if (window.cacheUserSession) {
+              window.cacheUserSession(user, val);
+            }
+            currentUserName = `${val.firstName} ${val.lastName}`;
           }
         } catch (e) {
           console.error("Auth check error:", e);
@@ -737,6 +744,12 @@
           return;
         }
 
+        const validImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+        if (!validImageTypes.includes(fileInput.type) && !fileInput.type.startsWith("image/")) {
+          showCheckoutError("Invalid file type. Please upload an image file (PNG, JPG, JPEG, WEBP) only.");
+          return;
+        }
+
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; btn.disabled = true;
 
         const formattedPickup = formatTo12Hour(rawPickupTime);
@@ -746,6 +759,7 @@
             let opts = cart[id].chosenOption ? ` (${cart[id].chosenOption})` : "";
             orderSummary += `${cart[id].qty}x ${cart[id].name}${opts}, `;
         }
+        const cleanOrderSummary = orderSummary.replace(/,\s*$/, "");
 
         try {
           const sRef = storageRef(storage, `receipts/orders/${Date.now()}_${fileInput.name}`);
@@ -754,7 +768,7 @@
 
           const orderRef = await push(ref(db, "orders"), {
             customerName: currentUserName,
-            items: orderSummary,
+            items: cleanOrderSummary,
             total: totalPrice,
             pickupTime: formattedPickup,
             rawPickupTime: rawPickupTime,
@@ -766,6 +780,7 @@
             customerName: currentUserName,
             amount: totalPrice,
             category: "Online Order",
+            items: cleanOrderSummary,
             timestamp: Date.now(),
             status: "pending",
             receiptUrl: receiptUrl,

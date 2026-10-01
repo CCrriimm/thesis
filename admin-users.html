@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin - Manage Admins</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link
       rel="stylesheet"
@@ -70,7 +71,7 @@
       }
     </style>
   </head>
-  <body>
+  <body style="display: none;">
     <nav class="sidebar">
       <div class="sidebar-header">
         <h4 class="mb-0 fw-bold">Tom's Admin</h4>
@@ -345,76 +346,94 @@
       // checks if admin
       onAuthStateChanged(auth, async (user) => {
         if (!user) {
+          sessionStorage.clear();
           window.location.replace("login.html");
           return;
         }
-        currentUserUid = user.uid;
-        const snap = await get(ref(db, "users/" + user.uid));
-        if (!snap.exists() || snap.val().role !== "admin") {
-          window.location.replace("index.html");
+        try {
+          currentUserUid = user.uid;
+          const snap = await get(ref(db, "users/" + user.uid));
+          if (!snap.exists() || snap.val().role !== "admin") {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            window.location.replace("index.html");
+            return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, snap.val());
+          }
+          document.body.style.display = "block";
+          initAdminUsers();
+        } catch (e) {
+          console.error("Auth verify error:", e);
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          window.location.replace("login.html");
         }
       });
 
       // only admin shows
-      onValue(ref(db, "users"), (snapshot) => {
-        const tbody = document.getElementById("adminsTableBody");
-        tbody.innerHTML = "";
-        let hasAdmins = false;
+      function initAdminUsers() {
+        onValue(ref(db, "users"), (snapshot) => {
+          const tbody = document.getElementById("adminsTableBody");
+          tbody.innerHTML = "";
+          let hasAdmins = false;
 
-        if (snapshot.exists()) {
-          snapshot.forEach((child) => {
-            const data = child.val();
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              const data = child.val();
 
-            // Only show if role is admin
-            if (data.role === "admin") {
-              hasAdmins = true;
-              const uid = child.key;
+              // Only show if role is admin
+              if (data.role === "admin") {
+                hasAdmins = true;
+                const uid = child.key;
 
-              // Display Name
-              let name = "";
-              const fullName = (data.firstName + " " + data.lastName).trim();
-              if (fullName) {
-                name = fullName;
-              } else {
-                name = "Admin";
-              }
-
-              // Status Badge
-              let statusBadge = "";
-              if (data.status === "deactivated") {
-                statusBadge =
-                  '<span class="badge bg-danger">Deactivated</span>';
-              } else {
-                statusBadge = '<span class="badge bg-success">Active</span>';
-              }
-
-              // Button (Deactivate/Reactivate)
-              let actionBtn = "";
-              if (uid === currentUserUid) {
-                actionBtn = `<button class="btn btn-sm btn-outline-secondary w-100" disabled>Current Session</button>`;
-              } else {
-                if (data.status === "deactivated") {
-                  actionBtn = `<button onclick="changeStatus('${uid}', 'active')" class="btn btn-sm btn-success w-100 fw-bold">Re-Activate</button>`;
+                // Display Name
+                let name = "";
+                const fullName = (data.firstName + " " + data.lastName).trim();
+                if (fullName) {
+                  name = fullName;
                 } else {
-                  actionBtn = `<button onclick="changeStatus('${uid}', 'deactivated')" class="btn btn-sm btn-outline-danger w-100 fw-bold">Deactivate</button>`;
+                  name = "Admin";
                 }
+
+                // Status Badge
+                let statusBadge = "";
+                if (data.status === "deactivated") {
+                  statusBadge =
+                    '<span class="badge bg-danger">Deactivated</span>';
+                } else {
+                  statusBadge = '<span class="badge bg-success">Active</span>';
+                }
+
+                // Button (Deactivate/Reactivate)
+                let actionBtn = "";
+                if (uid === currentUserUid) {
+                  actionBtn = `<button class="btn btn-sm btn-outline-secondary w-100" disabled>Current Session</button>`;
+                } else {
+                  if (data.status === "deactivated") {
+                    actionBtn = `<button onclick="changeStatus('${uid}', 'active')" class="btn btn-sm btn-success w-100 fw-bold">Re-Activate</button>`;
+                  } else {
+                    actionBtn = `<button onclick="changeStatus('${uid}', 'deactivated')" class="btn btn-sm btn-outline-danger w-100 fw-bold">Deactivate</button>`;
+                  }
+                }
+
+                tbody.innerHTML += `
+                    <tr>
+                      <td class="fw-bold"><i class="fa-solid text-muted me-2"></i>${name}</td>
+                      <td><small>${data.email}</small></td>
+                      <td>${statusBadge}</td>
+                      <td style="width: 150px;">${actionBtn}</td>
+                    </tr>
+                  `;
               }
+            });
+          }
 
-              tbody.innerHTML += `
-                  <tr>
-                    <td class="fw-bold"><i class="fa-solid text-muted me-2"></i>${name}</td>
-                    <td><small>${data.email}</small></td>
-                    <td>${statusBadge}</td>
-                    <td style="width: 150px;">${actionBtn}</td>
-                  </tr>
-                `;
-            }
-          });
-        }
-
-        if (!hasAdmins)
-          tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">No admins found.</td></tr>`;
-      });
+          if (!hasAdmins)
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">No admins found.</td></tr>`;
+        });
+      }
 
       // Helper: Show Success Toast
       function showSuccess(msg) {
@@ -519,10 +538,16 @@
 
       document
         .getElementById("adminLogoutBtn")
-        .addEventListener("click", () => {
-          signOut(auth).then(() => {
-            window.location.href = "login.html";
-          });
+        ?.addEventListener("click", async (e) => {
+          e.preventDefault();
+          try {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            await signOut(auth);
+          } catch (err) {
+            console.warn("Sign out error:", err);
+          }
+          window.location.replace("login.html");
         });
     </script>
   </body>

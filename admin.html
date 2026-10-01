@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tom's Admin - Dashboard</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link
       rel="stylesheet"
@@ -113,9 +114,12 @@
         background-color: #d1660a;
         color: white;
       }
+      .auth-curtain {
+        display: none !important;
+      }
     </style>
   </head>
-  <body>
+  <body style="display: none;">
     <nav class="sidebar">
       <div class="sidebar-header">
         <h4 class="mb-0 fw-bold">Tom's Admin</h4>
@@ -344,11 +348,25 @@
           return;
         }
         currentUserUid = user.uid;
-        const snap = await get(ref(db, "users/" + user.uid));
-        if (!snap.exists() || snap.val().role !== "admin") {
-          window.location.replace("index.html");
+        try {
+          const snap = await get(ref(db, "users/" + user.uid));
+          if (!snap.exists() || snap.val().role !== "admin") {
+            window.location.replace("index.html");
+            return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, snap.val());
+          }
+          // Authenticated & verified Admin -> Reveal body and start live data listeners
+          document.body.style.display = "block";
+          initAdminDashboard();
+        } catch (err) {
+          console.error("Admin verification error:", err);
+          window.location.replace("login.html");
         }
       });//----------- End of Auth Check
+
+      function initAdminDashboard() {
 
       // Cache Payments (to easily match receiptUrl by orderId)
       onValue(ref(db, "payments"), (snapshot) => {
@@ -511,6 +529,7 @@
         activeReadyOrders.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         renderReadyPickupOrders();
       });
+      }
 
       function formatTo12Hour(timeStr) {
         if (!timeStr) return "";
@@ -662,10 +681,11 @@
       });
 
       // Logout
-      document.getElementById("adminLogoutBtn").addEventListener("click", () => {
-        signOut(auth).then(() => {
-          window.location.href = "login.html";
-        });
+      document.getElementById("adminLogoutBtn").addEventListener("click", async () => {
+        if (window.clearUserSession) window.clearUserSession();
+        else sessionStorage.clear();
+        await signOut(auth);
+        window.location.replace("login.html");
       });
     </script>
   </body>

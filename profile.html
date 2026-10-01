@@ -7,6 +7,7 @@
     
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="js/session-guard.js"></script>
 
     <style>
         :root { --toms-orange: #f57d10ff; --toms-dark: #212529; }
@@ -79,7 +80,7 @@
         <div class="container mobile-container py-0 d-flex justify-content-between">
             <a class="navbar-brand fw-bold fs-4" href="index.html" style="color: var(--toms-orange);">
                 <i class="fa-solid fa-arrow-left text-dark me-2" onclick="history.back(); return false;"></i> 
-                Tom's<span class="text-dark">Chicken</span>
+                Tom's <span class="text-dark">Chicken</span>
             </a>
             <button id="logoutBtn" class="btn btn-sm btn-dark rounded-pill px-3">
                 <i class="fa-solid fa-right-from-bracket me-1"></i> Logout
@@ -285,6 +286,7 @@
         // 1. SECURITY & PROFILE LOAD
         onAuthStateChanged(auth, async (user) => {
             if (!user) {
+                if (window.clearUserSession) window.clearUserSession();
                 window.location.replace("login.html");
             } else {
                 currentUserUid = user.uid;
@@ -296,6 +298,9 @@
                         if (data.role === "admin") {
                             window.location.replace("admin.html");
                             return;
+                        }
+                        if (window.cacheUserSession) {
+                            window.cacheUserSession(user, data);
                         }
                         rawData.firstName = data.firstName || "";
                         rawData.lastName = data.lastName || "";
@@ -369,6 +374,7 @@
             btn.disabled = true;
 
             try {
+                const oldName = currentUserName;
                 await update(ref(db, 'users/' + currentUserUid), {
                     firstName: newFirst,
                     lastName: newLast
@@ -376,6 +382,52 @@
 
                 rawData.firstName = newFirst;
                 rawData.lastName = newLast;
+                const newFullName = `${newFirst} ${newLast}`;
+                if (window.cacheUserSession) {
+                    window.cacheUserSession({ email: rawData.email }, { firstName: newFirst, lastName: newLast, role: "customer" });
+                } else {
+                    sessionStorage.setItem("toms_user_name", newFullName);
+                    sessionStorage.setItem("toms_user_initial", newFirst.charAt(0).toUpperCase());
+                }
+
+                // Sync new full name to reservations
+                try {
+                    const resSnap = await get(ref(db, 'reservations'));
+                    if (resSnap.exists()) {
+                        const resUpdates = {};
+                        resSnap.forEach((child) => {
+                            const val = child.val();
+                            if (val.userId === currentUserUid || val.name === oldName || (rawData.email && val.email === rawData.email)) {
+                                resUpdates[`reservations/${child.key}/name`] = newFullName;
+                            }
+                        });
+                        if (Object.keys(resUpdates).length > 0) {
+                            await update(ref(db), resUpdates);
+                        }
+                    }
+                } catch (resErr) {
+                    console.warn("Could not sync name to reservations:", resErr);
+                }
+
+                // Sync new full name to orders
+                try {
+                    const ordSnap = await get(ref(db, 'orders'));
+                    if (ordSnap.exists()) {
+                        const ordUpdates = {};
+                        ordSnap.forEach((child) => {
+                            const val = child.val();
+                            if (val.userId === currentUserUid || val.customerName === oldName || (rawData.email && val.customerEmail === rawData.email)) {
+                                ordUpdates[`orders/${child.key}/customerName`] = newFullName;
+                            }
+                        });
+                        if (Object.keys(ordUpdates).length > 0) {
+                            await update(ref(db), ordUpdates);
+                        }
+                    }
+                } catch (ordErr) {
+                    console.warn("Could not sync name to orders:", ordErr);
+                }
+
                 updateProfileUI();
                 toggleEditMode(false);
             } catch (error) {
@@ -690,7 +742,7 @@
                     let myRes = [];
                     snapshot.forEach(child => {
                         let data = child.val();
-                        if (data.name === currentUserName) {
+                        if (data.userId === currentUserUid || data.name === currentUserName || (rawData.email && data.email === rawData.email)) {
                             myRes.push({ id: child.key, ...data });
                         }
                     });
@@ -777,7 +829,7 @@
                     let myOrders = [];
                     snapshot.forEach(child => {
                         let data = child.val();
-                        if (data.customerName === currentUserName) {
+                        if (data.userId === currentUserUid || data.customerName === currentUserName || (rawData.email && data.customerEmail === rawData.email)) {
                             myOrders.push({ id: child.key, ...data });
                         }
                     });
@@ -873,10 +925,14 @@
         }
 
         // 5. LOGOUT
-        document.getElementById('logoutBtn').addEventListener('click', () => {
-            signOut(auth).then(() => {
-                window.location.href = "login.html";
-            });
+        document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+            try {
+                sessionStorage.clear();
+                await signOut(auth);
+            } catch (err) {
+                console.warn("Sign out error:", err);
+            }
+            window.location.replace("login.html");
         });
     </script>
 </body>

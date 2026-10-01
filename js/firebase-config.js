@@ -33,6 +33,11 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
+try {
+    window._firebaseAuth = auth;
+    window._firebaseSignOut = signOut;
+} catch (e) {}
+
 export { 
     app, 
     db, 

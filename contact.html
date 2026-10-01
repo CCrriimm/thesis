@@ -7,6 +7,7 @@
     
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
 
     <style>
@@ -66,8 +67,11 @@
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .profile-circle:hover {
-            transform: scale(1.15);
+            transform: scale(1.06);
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .profile-circle.dropdown-toggle::after {
+            display: none !important;
         }
 
         .navbar {
@@ -205,7 +209,7 @@
   <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top">
       <div class="container">
           <a class="navbar-brand fw-bold fs-3" href="index.html" style="color: var(--toms-orange);">
-              Tom's<span class="text-dark">Chicken</span>
+              Tom's <span class="text-dark">Chicken</span>
           </a>
 
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -228,6 +232,7 @@
           <div id="authSection" class="d-none d-lg-block">
               <a href="login.html" class="btn-orange">Login</a>
           </div>
+          <script>if (window.renderPreloadedNavbar) window.renderPreloadedNavbar("authSection", "authSectionMobile");</script>
       </div>
   </nav>
 
@@ -411,6 +416,105 @@
 
       let currentUser = null;
 
+      // 1. Instant Session Check: Renders navbar immediately to prevent flickering
+      try {
+          const cachedLoggedIn = sessionStorage.getItem("toms_user_logged_in") === "true";
+          const cachedRole = sessionStorage.getItem("toms_user_role");
+          if (cachedRole === "admin") {
+              window.location.replace("admin.html");
+          } else if (cachedLoggedIn) {
+              const email = sessionStorage.getItem("toms_user_email") || "";
+              const name = sessionStorage.getItem("toms_user_name") || email;
+              const initial = sessionStorage.getItem("toms_user_initial") || email.charAt(0).toUpperCase();
+              renderUserNav(initial, name, email);
+          }
+      } catch (e) {}
+
+      // Global logout function
+      window.handleCustomerLogout = async function() {
+          try {
+              sessionStorage.clear();
+              await signOut(auth);
+          } catch (err) {
+              console.warn("Sign out error:", err);
+          }
+          window.location.replace("login.html");
+      };
+
+      function renderUserNav(initial, name, email) {
+          const safeName = name || email || "Valued Customer";
+          const safeEmail = email || "";
+          const initialChar = initial || safeEmail.charAt(0).toUpperCase() || "U";
+
+          // Desktop Dropdown
+          if (authSection) {
+              authSection.innerHTML = `
+                  <div class="dropdown">
+                      <button class="profile-circle dropdown-toggle border-0" type="button" id="customerMenuBtn" data-bs-toggle="dropdown" aria-expanded="false" title="${safeName}">
+                          ${initialChar}
+                      </button>
+                      <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 mt-2" aria-labelledby="customerMenuBtn" style="min-width: 220px;">
+                          <li class="px-3 py-2 border-bottom bg-light rounded-top">
+                              <div class="fw-bold text-dark text-truncate" style="max-width: 190px;">${safeName}</div>
+                              <small class="text-muted text-truncate d-block" style="max-width: 190px;">${safeEmail}</small>
+                          </li>
+                          <li>
+                              <a class="dropdown-item py-2" href="profile.html">
+                                  <i class="fa-solid fa-user me-2 text-warning"></i> My Profile & Orders
+                              </a>
+                          </li>
+                          <li><hr class="dropdown-divider my-1"></li>
+                          <li>
+                              <a class="dropdown-item py-2 text-danger fw-bold customer-logout-btn" href="#">
+                                  <i class="fa-solid fa-right-from-bracket me-2"></i> Log Out
+                              </a>
+                          </li>
+                      </ul>
+                  </div>
+              `;
+          }
+
+          // Mobile Navigation
+          if (authSectionMobile) {
+              authSectionMobile.innerHTML = `
+                  <div class="p-3 bg-light rounded-3 shadow-sm border mt-2">
+                      <div class="d-flex align-items-center gap-3 mb-3">
+                          <div class="profile-circle flex-shrink-0">${initialChar}</div>
+                          <div class="text-start overflow-hidden">
+                              <div class="fw-bold text-dark text-truncate">${safeName}</div>
+                              <small class="text-muted text-truncate d-block">${safeEmail}</small>
+                          </div>
+                      </div>
+                      <div class="d-flex gap-2">
+                          <a href="profile.html" class="btn btn-sm btn-outline-dark fw-bold flex-grow-1">
+                              <i class="fa-solid fa-user me-1"></i> Profile
+                          </a>
+                          <button class="btn btn-sm btn-danger fw-bold flex-grow-1 customer-logout-btn">
+                              <i class="fa-solid fa-right-from-bracket me-1"></i> Log Out
+                          </button>
+                      </div>
+                  </div>
+              `;
+          }
+
+          // Attach logout listeners
+          document.querySelectorAll(".customer-logout-btn").forEach((btn) => {
+              btn.onclick = async (e) => {
+                  e.preventDefault();
+                  await window.handleCustomerLogout();
+              };
+          });
+      }
+
+      function renderGuestNav() {
+          if (authSection) {
+              authSection.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          }
+          if (authSectionMobile) {
+              authSectionMobile.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          }
+      }
+
       // Redirect admins away from customer contact page
       window.addEventListener("pageshow", async () => {
           if (auth.currentUser) {
@@ -426,45 +530,38 @@
       onAuthStateChanged(auth, async (user) => {
           currentUser = user;
           if (user) {
+              let name = user.email;
               try {
                   const snap = await get(ref(db, "users/" + user.uid));
-                  if (snap.exists() && snap.val().role === "admin") {
-                      window.location.replace("admin.html");
-                      return;
+                  if (snap.exists()) {
+                      const val = snap.val();
+                      if (val.role === "admin") {
+                          sessionStorage.setItem("toms_user_role", "admin");
+                          window.location.replace("admin.html");
+                          return;
+                      }
+                      const fullName = ((val.firstName || "") + " " + (val.lastName || "")).trim();
+                      if (fullName) name = fullName;
                   }
               } catch (e) {
                   console.error("Auth check error:", e);
               }
 
-              const firstLetter = user.email.charAt(0).toUpperCase();
+              if (window.cacheUserSession) {
+                  window.cacheUserSession(user, { firstName: name, role: "customer" });
+              }
 
-                // Desktop: Profile circle
-                authSection.innerHTML = `
-                    <a href="profile.html" class="profile-circle" title="${user.email}">
-                        ${firstLetter}
-                    </a>
-                `;
-
-                // Mobile: Profile circle
-                authSectionMobile.innerHTML = `
-                    <div class="d-flex justify-content-center mb-2">
-                        <a href="profile.html" class="profile-circle" title="${user.email}">
-                            ${firstLetter}
-                        </a>
-                    </div>
-                `;
+              const initial = (name.charAt(0) || user.email.charAt(0) || "U").toUpperCase();
+              renderUserNav(initial, name, user.email);
           } else {
-              authSection.innerHTML = `
-                  <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>
-              `;
-              authSectionMobile.innerHTML = `
-                  <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>
-              `;
+              if (window.clearUserSession) window.clearUserSession();
+              else sessionStorage.clear();
+              renderGuestNav();
           }
       });
 
       window.checkReservationAuth = function() {
-          if (currentUser || auth.currentUser) {
+          if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
               window.location.href = "reservation.html";
           } else {
               authModal.show();
@@ -472,7 +569,7 @@
       }
 
       window.checkMenuAuth = function() {
-          if (currentUser || auth.currentUser) {
+          if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
               window.location.href = "menu.html";
           } else {
               authModal.show();

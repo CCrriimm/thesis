@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin - Payments</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link
       rel="stylesheet"
@@ -59,12 +60,25 @@
         margin-left: var(--sidebar-width);
         padding: 30px;
       }
-      .receipt-img {
+      .receipt-img-container {
+        width: 320px;
+        height: 420px;
         max-width: 100%;
-        height: auto;
-        border-radius: 8px;
-        max-height: 60vh;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        border-radius: 12px;
+        border: 1px solid #dee2e6;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        overflow: hidden;
+      }
+      .receipt-img {
+        width: 100%;
+        height: 100%;
         object-fit: contain;
+        display: block;
       }
       .btn-orange {
         background-color: var(--toms-orange);
@@ -83,8 +97,7 @@
         font-weight: bold;
       }
     </style>
-  </head>
-  <body>
+  <body style="display: none;">
     <nav class="sidebar">
       <div class="sidebar-header">
         <h4 class="mb-0 fw-bold">Tom's Admin</h4>
@@ -148,7 +161,9 @@
           </div>
           <div class="modal-body text-center bg-light p-4">
             <div class="mb-3">
-              <img id="modalReceiptImg" src="" alt="Receipt" class="receipt-img shadow mb-2 bg-white p-2 border" />
+              <div class="receipt-img-container mb-2">
+                <img id="modalReceiptImg" src="" alt="Receipt" class="receipt-img" />
+              </div>
               <div>
                 <a id="viewFullReceiptBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-dark mt-2 d-none">
                   <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open Original Image in New Tab
@@ -156,7 +171,20 @@
               </div>
             </div>
             <h4 id="modalCustomerName" class="fw-bold mb-1"></h4>
-            <h4 id="modalAmount" class="fw-bold text-success mb-2"></h4>
+            <h4 id="modalAmount" class="fw-bold text-success mb-3"></h4>
+            
+            <div class="card border rounded-3 text-start mb-3 shadow-sm overflow-hidden">
+              <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                <small class="text-muted fw-bold text-uppercase">
+                  <i class="fa-solid fa-utensils me-1 text-warning"></i> Ordered Items
+                </small>
+                <span id="modalItemsCountBadge" class="badge bg-secondary rounded-pill">0 items</span>
+              </div>
+              <div id="modalOrderedItemsContainer" class="p-2 bg-light" style="max-height: 220px; overflow-y: auto;">
+                <div class="text-muted small text-center py-2">--</div>
+              </div>
+            </div>
+            
             <div id="modalReasonWrap" class="d-none alert alert-danger py-2 px-3 small fw-bold text-start mb-0">
               <i class="fa-solid fa-circle-exclamation me-1"></i> <span id="modalReasonText"></span>
             </div>
@@ -254,21 +282,108 @@
       let currentResId = null;
       let currentOrderId = null;
       let allPayments = [];
+      let ordersMap = {};
+      let reservationsMap = {};
       let currentView = "pending";
+
+      function getPaymentItemsText(p) {
+        // If payment object already has items
+        if (p.items) {
+          if (Array.isArray(p.items)) {
+            return p.items.map(it => {
+              if (typeof it === "string") return it;
+              const name = it.name || it.item || "Item";
+              const qty = it.quantity || it.qty || 1;
+              return `${qty}x ${name}`;
+            }).join(", ");
+          } else if (typeof p.items === "string") {
+            return p.items;
+          }
+        }
+
+        // Check linked order
+        const orderId = p.orderId || (p.category === "Online Order" ? p.id : null);
+        if (orderId && ordersMap[orderId]) {
+          const ord = ordersMap[orderId];
+          if (ord.items) {
+            if (Array.isArray(ord.items)) {
+              return ord.items.map(it => {
+                if (typeof it === "string") return it;
+                const name = it.name || it.item || "Item";
+                const qty = it.quantity || it.qty || 1;
+                return `${qty}x ${name}`;
+              }).join(", ");
+            } else if (typeof ord.items === "string") {
+              return ord.items;
+            }
+          }
+        }
+
+        // Check linked reservation
+        const resId = p.reservationId || (p.category === "Online Reservation" ? p.id : null);
+        if (resId && reservationsMap[resId]) {
+          const res = reservationsMap[resId];
+          if (res.items) {
+            if (Array.isArray(res.items)) {
+              return res.items.map(it => {
+                if (typeof it === "string") return it;
+                const name = it.name || it.item || "Item";
+                const qty = it.quantity || it.qty || 1;
+                return `${qty}x ${name}`;
+              }).join(", ");
+            } else if (typeof res.items === "string") {
+              return res.items;
+            }
+          }
+          if (res.advanceOrder || res.notes) {
+            return res.advanceOrder || res.notes;
+          }
+        }
+
+        return "None (Table Reservation Only)";
+      }
 
       onAuthStateChanged(auth, async (user) => {
         if (!user) {
+          sessionStorage.clear();
           window.location.replace("login.html");
           return;
         }
-        const snap = await get(ref(db, "users/" + user.uid));
-        if (!snap.exists() || snap.val().role !== "admin") {
-          window.location.replace("index.html");
+        try {
+          const snap = await get(ref(db, "users/" + user.uid));
+          if (!snap.exists() || snap.val().role !== "admin") {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            window.location.replace("index.html");
+            return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, snap.val());
+          }
+          document.body.style.display = "block";
+          initPayments();
+        } catch (err) {
+          console.error("Auth verify error:", err);
+          sessionStorage.clear();
+          window.location.replace("login.html");
         }
       });
 
-      const paymentsRef = ref(db, "payments");
-      onValue(paymentsRef, async (snapshot) => {
+      function initPayments() {
+        // Listen to orders to associate item lists
+        onValue(ref(db, "orders"), (snap) => {
+          ordersMap = snap.exists() ? snap.val() : {};
+          renderTable();
+        });
+
+        // Listen to reservations to associate item lists
+        onValue(ref(db, "reservations"), (snap) => {
+          reservationsMap = snap.exists() ? snap.val() : {};
+          renderTable();
+        });
+
+        const paymentsRef = ref(db, "payments");
+        onValue(paymentsRef, async (snapshot) => {
         allPayments = [];
         if (snapshot.exists()) {
           const paymentsToSync = [];
@@ -340,6 +455,99 @@
         }
         renderTable();
       });
+      }
+
+      function renderFormattedOrderedItems(p) {
+        const container = document.getElementById("modalOrderedItemsContainer");
+        const countBadge = document.getElementById("modalItemsCountBadge");
+        if (!container) return;
+
+        // Resolve raw items from payment, linked order, or linked reservation
+        let rawItems = p.items;
+        if (!rawItems) {
+          const orderId = p.orderId || (p.category === "Online Order" ? p.id : null);
+          if (orderId && ordersMap[orderId]) {
+            rawItems = ordersMap[orderId].items;
+          }
+          const resId = p.reservationId || (p.category === "Online Reservation" ? p.id : null);
+          if (resId && reservationsMap[resId]) {
+            const res = reservationsMap[resId];
+            rawItems = res.items || res.advanceOrder || res.notes;
+          }
+        }
+
+        // Check if table reservation without advance order
+        if (!rawItems || rawItems === "None (Table Reservation Only)" || rawItems === "Table Reservation (No advance food)") {
+          if (countBadge) countBadge.innerText = "Table Only";
+          container.innerHTML = `
+            <div class="text-center py-3 text-muted">
+              <i class="fa-solid fa-chair text-secondary fa-lg mb-1 d-block"></i>
+              <span class="small fw-bold">Table Reservation Only</span>
+              <p class="small text-muted mb-0" style="font-size: 0.78rem;">No advance food items pre-ordered.</p>
+            </div>
+          `;
+          return;
+        }
+
+        let parsedList = [];
+        if (Array.isArray(rawItems)) {
+          parsedList = rawItems;
+        } else if (typeof rawItems === "string") {
+          let str = rawItems.replace(/\[ADVANCE ORDER\]/gi, "").replace(/Advance Order:/gi, "").trim();
+          parsedList = str.split(",").map(s => s.trim()).filter(s => s.length > 0);
+        }
+
+        if (parsedList.length === 0) {
+          if (countBadge) countBadge.innerText = "0 items";
+          container.innerHTML = `<div class="text-center text-muted py-2 small">No item details available.</div>`;
+          return;
+        }
+
+        if (countBadge) {
+          countBadge.innerText = `${parsedList.length} ${parsedList.length === 1 ? "item" : "items"}`;
+        }
+
+        let html = '<div class="d-flex flex-column gap-2">';
+        parsedList.forEach((itemObj) => {
+          let qty = "1x";
+          let name = "";
+          let option = "";
+
+          if (typeof itemObj === "string") {
+            let itemStr = itemObj.trim().replace(/,\s*$/, "");
+            const qtyMatch = itemStr.match(/^(\d+)\s*[xX]?\s+(.*)/);
+            if (qtyMatch) {
+              qty = `${qtyMatch[1]}x`;
+              itemStr = qtyMatch[2].trim();
+            }
+            const optMatch = itemStr.match(/^(.*?)\s*\((.*?)\)$/);
+            if (optMatch) {
+              name = optMatch[1].trim();
+              option = optMatch[2].trim();
+            } else {
+              name = itemStr;
+            }
+          } else if (typeof itemObj === "object" && itemObj !== null) {
+            qty = `${itemObj.quantity || itemObj.qty || 1}x`;
+            name = itemObj.name || itemObj.item || "Menu Item";
+            option = itemObj.option || itemObj.chosenOption || "";
+          }
+
+          const optBadge = option 
+            ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-2" style="font-size: 0.72rem; font-weight: 600;"><i class="fa-solid fa-tag me-1 text-warning"></i>${option}</span>` 
+            : "";
+
+          html += `
+            <div class="d-flex align-items-center p-2 rounded-3 bg-white border shadow-sm text-start">
+              <span class="badge bg-dark text-white fw-bold me-2 px-2 py-1" style="font-size: 0.8rem; letter-spacing: 0.5px;">${qty}</span>
+              <span class="fw-bold text-dark text-truncate" style="font-size: 0.88rem;">${name}</span>
+              ${optBadge}
+            </div>
+          `;
+        });
+        html += "</div>";
+        container.innerHTML = html;
+      }
 
       function renderTable() {
         const tbody = document.getElementById("paymentsTableBody");
@@ -424,6 +632,7 @@
 
         document.getElementById("modalCustomerName").innerText = "Customer: " + (p.customerName || "N/A");
         document.getElementById("modalAmount").innerText = "Amount: ₱" + (p.amount || "0.00");
+        renderFormattedOrderedItems(p);
 
         const imgEl = document.getElementById("modalReceiptImg");
         const receiptUrl = (p.receiptUrl || "").trim();
@@ -614,8 +823,16 @@
         }
       });
 
-      document.getElementById("adminLogoutBtn").addEventListener("click", () => {
-        signOut(auth).then(() => { window.location.href = "login.html"; });
+      document.getElementById("adminLogoutBtn")?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          await signOut(auth);
+        } catch (err) {
+          console.warn("Sign out error:", err);
+        }
+        window.location.replace("login.html");
       });
     </script>
   </body>

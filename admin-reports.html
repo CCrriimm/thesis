@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin - Reports & Sales Summary</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link
       rel="stylesheet"
@@ -206,7 +207,7 @@
       }
     </style>
   </head>
-  <body>
+  <body style="display: none;">
     <!-- Sidebar Navigation -->
     <nav class="sidebar no-print">
       <div class="sidebar-header">
@@ -562,31 +563,49 @@
       // Auth & Role Check
       onAuthStateChanged(auth, async (user) => {
         if (!user) {
+          sessionStorage.clear();
           window.location.replace("login.html");
           return;
         }
         try {
           const userSnap = await get(ref(db, "users/" + user.uid));
           if (!userSnap.exists() || userSnap.val().role !== "admin") {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
             window.location.replace("index.html");
             return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, userSnap.val());
           }
           currentAdminName = userSnap.val().name || user.email || "Admin";
           const prepEl = document.getElementById("printPreparedBy");
           if (prepEl) prepEl.innerText = currentAdminName;
+
+          // Admin authorized: reveal page and attach listeners
+          document.body.style.display = "block";
+          initAdminReports();
         } catch (e) {
           console.error("Auth verify error:", e);
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          window.location.replace("login.html");
         }
       });
 
       // Logout handler
       const logoutBtn = document.getElementById("adminLogoutBtn");
       if (logoutBtn) {
-        logoutBtn.addEventListener("click", (e) => {
+        logoutBtn.addEventListener("click", async (e) => {
           e.preventDefault();
-          signOut(auth).then(() => {
-            window.location.href = "login.html";
-          });
+          try {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            await signOut(auth);
+          } catch (err) {
+            console.warn("Sign out error:", err);
+          }
+          window.location.replace("login.html");
         });
       }
 
@@ -815,51 +834,53 @@
         return String(rawItems).replace(/[\r\n]+/g, " ; ");
       }
 
-      // 1. LISTEN TO PAYMENTS
-      onValue(ref(db, "payments"), (snapshot) => {
-        rawPayments = [];
-        paymentsMap = {};
-        if (snapshot.exists()) {
-          snapshot.forEach((child) => {
-            const p = { id: child.key, ...child.val() };
-            rawPayments.push(p);
-            if (p.orderId) {
-              paymentsMap["order_" + p.orderId] = p;
-              paymentsMap[p.orderId] = p;
-            }
-            if (p.reservationId) {
-              paymentsMap["res_" + p.reservationId] = p;
-              paymentsMap[p.reservationId] = p;
-            }
-            paymentsMap[p.id] = p;
-          });
-        }
-        renderReport();
-      });
+      function initAdminReports() {
+        // 1. LISTEN TO PAYMENTS
+        onValue(ref(db, "payments"), (snapshot) => {
+          rawPayments = [];
+          paymentsMap = {};
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              const p = { id: child.key, ...child.val() };
+              rawPayments.push(p);
+              if (p.orderId) {
+                paymentsMap["order_" + p.orderId] = p;
+                paymentsMap[p.orderId] = p;
+              }
+              if (p.reservationId) {
+                paymentsMap["res_" + p.reservationId] = p;
+                paymentsMap[p.reservationId] = p;
+              }
+              paymentsMap[p.id] = p;
+            });
+          }
+          renderReport();
+        });
 
-      // 2. LISTEN TO ONLINE ORDERS
-      onValue(ref(db, "orders"), (snapshot) => {
-        rawOrders = [];
-        if (snapshot.exists()) {
-          snapshot.forEach((child) => {
-            const ord = { id: child.key, ...child.val() };
-            rawOrders.push(ord);
-          });
-        }
-        renderReport();
-      });
+        // 2. LISTEN TO ONLINE ORDERS
+        onValue(ref(db, "orders"), (snapshot) => {
+          rawOrders = [];
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              const ord = { id: child.key, ...child.val() };
+              rawOrders.push(ord);
+            });
+          }
+          renderReport();
+        });
 
-      // 3. LISTEN TO RESERVATIONS & ADVANCE ORDERS
-      onValue(ref(db, "reservations"), (snapshot) => {
-        rawReservations = [];
-        if (snapshot.exists()) {
-          snapshot.forEach((child) => {
-            const res = { id: child.key, ...child.val() };
-            rawReservations.push(res);
-          });
-        }
-        renderReport();
-      });
+        // 3. LISTEN TO RESERVATIONS & ADVANCE ORDERS
+        onValue(ref(db, "reservations"), (snapshot) => {
+          rawReservations = [];
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              const res = { id: child.key, ...child.val() };
+              rawReservations.push(res);
+            });
+          }
+          renderReport();
+        });
+      }
 
       // Main Filter & Render Function
       window.applyFilters = function () {
@@ -1562,8 +1583,7 @@
         window.exportToCSV();
       });
 
-      // Initial render
-      renderReport();
+      // Reports are rendered automatically when initAdminReports() receives verified admin auth and data
     </script>
   </body>
 </html>

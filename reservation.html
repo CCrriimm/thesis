@@ -13,6 +13,7 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
     />
+    <script src="js/session-guard.js"></script>
 
     <style>
       :root {
@@ -361,7 +362,7 @@
               return false;
             "
           ></i>
-          Tom's<span class="text-dark">Chicken</span>
+          Tom's <span class="text-dark">Chicken</span>
         </a>
       </div>
     </nav>
@@ -794,7 +795,7 @@
                 type="file"
                 id="resReceipt"
                 class="form-control"
-                accept="image/*"
+                accept="image/png, image/jpeg, image/jpg, image/webp"
                 required
               />
               <input type="hidden" id="receiptBase64" />
@@ -978,20 +979,26 @@
         document.getElementById("advanceMenuSection").classList.add("d-none");
       });
 
-      // 1. SECURITY
+      // 1. SECURITY & SESSION SYNC
+      currentUserName = sessionStorage.getItem("toms_user_name") || "";
       onAuthStateChanged(auth, async (user) => {
         if (!user) {
+          if (window.clearUserSession) window.clearUserSession();
           window.location.replace("login.html");
           return;
         }
         try {
           const snap = await get(ref(db, "users/" + user.uid));
           if (snap.exists()) {
-            if (snap.val().role === "admin") {
+            const val = snap.val();
+            if (val.role === "admin") {
               window.location.replace("admin.html");
               return;
             }
-            currentUserName = `${snap.val().firstName} ${snap.val().lastName}`;
+            if (window.cacheUserSession) {
+              window.cacheUserSession(user, val);
+            }
+            currentUserName = `${val.firstName} ${val.lastName}`;
           }
         } catch (e) {
           console.error("Auth check error:", e);
@@ -1755,6 +1762,12 @@
           return;
         }
 
+        const validImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+        if (!validImageTypes.includes(fileInput.type) && !fileInput.type.startsWith("image/")) {
+          showPaymentError("Invalid file type. Please upload an image file (PNG, JPG, JPEG, WEBP) only.");
+          return;
+        }
+
         const btn = document.getElementById("confirmPayBtn");
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
         btn.disabled = true;
@@ -1806,10 +1819,12 @@
                 status: "pending",
             });
 
+            const reservationItems = compiledNotes ? compiledNotes.replace("[ADVANCE ORDER]", "Advance Order:").trim() : "Table Reservation (No advance food)";
             await push(ref(db, "payments"), {
                 customerName: currentUserName,
                 amount: finalPaymentAmount.toFixed(2),
                 category: "Online Reservation",
+                items: reservationItems,
                 timestamp: Date.now(),
                 status: "pending",
                 receiptUrl: receiptUrl, // Saving the real Storage URL

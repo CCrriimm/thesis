@@ -12,6 +12,7 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
     />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
 
     <style>
@@ -150,6 +151,18 @@
     </div>
 
     <script type="module">
+      // Instant session pre-check to eliminate delay when navigating back to login
+      try {
+        if (sessionStorage.getItem("toms_user_logged_in") === "true") {
+          const cachedRole = sessionStorage.getItem("toms_user_role");
+          if (cachedRole === "admin") {
+            window.location.replace("admin.html");
+          } else {
+            window.location.replace("index.html");
+          }
+        }
+      } catch (e) {}
+
       import {
         auth,
         db,
@@ -224,12 +237,18 @@
           const snapshot = await get(userRef);
           if (snapshot.exists()) {
             const userData = snapshot.val();
+            if (window.cacheUserSession) {
+              window.cacheUserSession(user, userData);
+            }
+
             if (userData.role === "admin") {
               if (userData.status === "active") {
                 window.location.replace("admin.html");
                 return;
               } else {
                 isRedirecting = false;
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
                 await signOut(auth);
                 showLoginForm();
                 showError("Access Denied: Your admin account has been deactivated.");
@@ -240,6 +259,12 @@
               return;
             }
           }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, { role: "customer" });
+          }
+          sessionStorage.setItem("toms_user_role", "customer");
+          sessionStorage.setItem("toms_user_name", user.email);
+          sessionStorage.setItem("toms_user_initial", user.email.charAt(0).toUpperCase());
           window.location.replace("index.html");
         } catch (err) {
           console.error("Session verification error:", err);
@@ -326,10 +351,17 @@
           const snapshot = await get(userRef); // Checks if user data exists in the database and retrieves it (Like yung value yung email and role and status)
           if (snapshot.exists()) {
             const userData = snapshot.val(); // Gets user data (email, role, status) from the database
+            if (window.cacheUserSession) {
+              window.cacheUserSession(user, userData);
+            }
+
             if (userData.role === "admin") {
               if (userData.status === "active") {
                 window.location.replace("admin.html");
               } else {
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                await signOut(auth);
                 showError(
                   "Access Denied: Your admin account has been deactivated.",
                 );

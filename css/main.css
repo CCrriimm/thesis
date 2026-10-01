@@ -3,6 +3,22 @@
     --toms-dark: #212529;
 }
 
+html {
+    scrollbar-gutter: stable;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Prevent modal opening layout shifts caused by Bootstrap inline padding-right */
+body.modal-open,
+body[style*="padding-right"] {
+    padding-right: 0px !important;
+}
+
+.modal-open .fixed-top,
+.modal-open .sticky-top,
+.modal-open .navbar {
+    padding-right: 0px !important;
 }

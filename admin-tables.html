@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin - Tables</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
     <style>
@@ -25,7 +26,7 @@
       .btn-orange { background-color: var(--toms-orange); color: white; }
     </style>
   </head>
-  <body>
+  <body style="display: none;">
     <nav class="sidebar">
       <div class="sidebar-header">
         <h4 class="mb-0 fw-bold">Tom's Admin</h4>
@@ -153,61 +154,84 @@
       import { auth, db, ref, get, onAuthStateChanged, onValue, update, signOut } from "./js/firebase-config.js";
 
       onAuthStateChanged(auth, async (user) => {
-        if (!user) { window.location.replace("login.html"); return; }
-        const snap = await get(ref(db, "users/" + user.uid));
-        if (!snap.exists() || snap.val().role !== "admin") { window.location.replace("index.html"); }
+        if (!user) {
+          sessionStorage.clear();
+          window.location.replace("login.html");
+          return;
+        }
+        try {
+          const snap = await get(ref(db, "users/" + user.uid));
+          if (!snap.exists() || snap.val().role !== "admin") {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            window.location.replace("index.html");
+            return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, snap.val());
+          }
+          document.body.style.display = "block";
+          initAdminTables();
+        } catch (e) {
+          console.error("Auth verify error:", e);
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          window.location.replace("login.html");
+        }
       });
 
       const TOTAL_TABLES = 13;
-      const tablesRef = ref(db, "tables");
 
-      onValue(tablesRef, (snapshot) => {
-        const tableGrid = document.getElementById("tableGrid");
-        tableGrid.innerHTML = "";
-        let activeCount = 0;
-        let dbData = snapshot.exists() ? snapshot.val() : {};
+      function initAdminTables() {
+        const tablesRef = ref(db, "tables");
+        onValue(tablesRef, (snapshot) => {
+          const tableGrid = document.getElementById("tableGrid");
+          tableGrid.innerHTML = "";
+          let activeCount = 0;
+          let dbData = snapshot.exists() ? snapshot.val() : {};
 
-        for (let i = 1; i <= TOTAL_TABLES; i++) {
-          let tableInfo = dbData[i] || { status: "available", code: "" };
-          const isOccupied = tableInfo.status === "occupied";
-          if (isOccupied) activeCount++;
+          for (let i = 1; i <= TOTAL_TABLES; i++) {
+            let tableInfo = dbData[i] || { status: "available", code: "" };
+            const isOccupied = tableInfo.status === "occupied";
+            if (isOccupied) activeCount++;
 
-          let cardClass = isOccupied ? "status-occupied" : "status-available";
-          let statusText = isOccupied 
-            ? '<span class="text-danger fw-bold"><i class="fa-solid fa-user-check"></i> Occupied (Unli)</span>'
-            : '<span class="text-success fw-bold"><i class="fa-solid fa-check-circle"></i> Available</span>';
+            let cardClass = isOccupied ? "status-occupied" : "status-available";
+            let statusText = isOccupied 
+              ? '<span class="text-danger fw-bold"><i class="fa-solid fa-user-check"></i> Occupied (Unli)</span>'
+              : '<span class="text-success fw-bold"><i class="fa-solid fa-check-circle"></i> Available</span>';
 
-          let codeHTML = "";
-          if (isOccupied) {
-            codeHTML = `
-              <h4 class="unli-code fw-bold my-2">${tableInfo.code}</h4>
-              <div class="badge bg-dark mb-3">${tableInfo.promo} | ${tableInfo.pax} Pax</div>
-              <div class="d-flex gap-2">
-                <button onclick="viewTableQR(${i}, '${tableInfo.code}', '${tableInfo.promo}', ${tableInfo.pax})" class="btn btn-dark btn-sm w-50 fw-bold"><i class="fa-solid fa-qrcode"></i> QR</button>
-                <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-50 fw-bold">End</button>
-              </div>
-            `;
-          } else {
-            codeHTML = `
-              <div class="my-4 text-muted small">No active code</div>
-              <button onclick="openPromoModal(${i})" class="btn btn-orange btn-sm w-100 fw-bold">Generate Code</button>
-            `;
-          }
+            let codeHTML = "";
+            if (isOccupied) {
+              codeHTML = `
+                <h4 class="unli-code fw-bold my-2">${tableInfo.code}</h4>
+                <div class="badge bg-dark mb-3">${tableInfo.promo} | ${tableInfo.pax} Pax</div>
+                <div class="d-flex gap-2">
+                  <button onclick="viewTableQR(${i}, '${tableInfo.code}', '${tableInfo.promo}', ${tableInfo.pax})" class="btn btn-dark btn-sm w-50 fw-bold"><i class="fa-solid fa-qrcode"></i> QR</button>
+                  <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-50 fw-bold">End</button>
+                </div>
+              `;
+            } else {
+              codeHTML = `
+                <div class="my-4 text-muted small">No active code</div>
+                <button onclick="openPromoModal(${i})" class="btn btn-orange btn-sm w-100 fw-bold">Generate Code</button>
+              `;
+            }
 
-          tableGrid.innerHTML += `
-            <div class="col-md-4 col-lg-3">
-              <div class="card table-card h-100 p-3 shadow-sm ${cardClass}">
-                <div class="card-body p-0">
-                  <h4 class="fw-bold mb-1">Table ${i}</h4>
-                  <div class="mb-2">${statusText}</div>
-                  ${codeHTML}
+            tableGrid.innerHTML += `
+              <div class="col-md-4 col-lg-3">
+                <div class="card table-card h-100 p-3 shadow-sm ${cardClass}">
+                  <div class="card-body p-0">
+                    <h4 class="fw-bold mb-1">Table ${i}</h4>
+                    <div class="mb-2">${statusText}</div>
+                    ${codeHTML}
+                  </div>
                 </div>
               </div>
-            </div>
-          `;
-        }
-        document.getElementById("activeCount").innerText = activeCount + " / " + TOTAL_TABLES + " Active";
-      });
+            `;
+          }
+          document.getElementById("activeCount").innerText = activeCount + " / " + TOTAL_TABLES + " Active";
+        });
+      }
 
       let pendingTableNum = null;
       let promoModal = null;
@@ -280,8 +304,16 @@
         }
       });
 
-      document.getElementById("adminLogoutBtn").addEventListener("click", () => {
-        signOut(auth).then(() => { window.location.href = "login.html"; });
+      document.getElementById("adminLogoutBtn")?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          await signOut(auth);
+        } catch (err) {
+          console.warn("Sign out error:", err);
+        }
+        window.location.replace("login.html");
       });
     </script>
   </body>

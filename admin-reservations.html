@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin - Reservations</title>
     <link href="Bootstrap/Content/bootstrap.min.css" rel="stylesheet" />
+    <script src="js/session-guard.js"></script>
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <link
       rel="stylesheet"
@@ -460,25 +461,83 @@
 
       let currentView = "upcoming";
       let allRes = [];
-      const walkInModal = new bootstrap.Modal(document.getElementById("walkInModal"));
+      let walkInModalInstance = null;
+      function getWalkInModal() {
+        if (!walkInModalInstance) {
+          const el = document.getElementById("walkInModal");
+          if (el && window.bootstrap) {
+            walkInModalInstance = new bootstrap.Modal(el);
+          }
+        }
+        return walkInModalInstance;
+      }
+
+      let currentDate = new Date(), currentMonth = currentDate.getMonth(), currentYear = currentDate.getFullYear();
+      let reservationData = {};
+      const TOTAL_TABLES = 13;
+      let advanceCart = {}, currentMenuData = {};
+      let advanceMenuPromos = null;
+      let fullRestaurantMenu = null;
+      let isInitialized = false;
+
+      function initAdminReservations() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        onValue(ref(db, "reservations"), (snapshot) => {
+          allRes = [];
+          if (snapshot.exists()) {
+            snapshot.forEach((child) => {
+              allRes.push({ id: child.key, ...child.val() });
+            });
+          }
+          renderTable();
+        });
+
+        onValue(ref(db, "reservationSlots"), (snapshot) => {
+          reservationData = snapshot.exists() ? snapshot.val() : {};
+          renderCalendar(currentMonth, currentYear);
+        });
+
+        onValue(ref(db, "advanceMenu"), (snapshot) => {
+          if (snapshot.exists()) {
+            advanceMenuPromos = snapshot.val();
+          }
+          renderCombinedAdvanceMenu();
+        });
+
+        onValue(ref(db, "menu"), (snapshot) => {
+          if (snapshot.exists()) {
+            fullRestaurantMenu = snapshot.val();
+          }
+          renderCombinedAdvanceMenu();
+        });
+      }
 
       onAuthStateChanged(auth, async (user) => {
-        if (!user) { window.location.replace("login.html"); return; }
-        const snap = await get(ref(db, "users/" + user.uid));
-        if (!snap.exists() || snap.val().role !== "admin") { window.location.replace("index.html"); }
-      });
-
-      // ==========================================
-      // VIEW TABLE (MAIN PAGE) LOGIC
-      // ==========================================
-      onValue(ref(db, "reservations"), (snapshot) => {
-        allRes = [];
-        if (snapshot.exists()) {
-          snapshot.forEach((child) => {
-            allRes.push({ id: child.key, ...child.val() });
-          });
+        if (!user) {
+          sessionStorage.clear();
+          window.location.replace("login.html");
+          return;
         }
-        renderTable();
+        try {
+          const snap = await get(ref(db, "users/" + user.uid));
+          if (!snap.exists() || snap.val().role !== "admin") {
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            window.location.replace("index.html");
+            return;
+          }
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, snap.val());
+          }
+          initAdminReservations();
+        } catch (e) {
+          console.error("Auth verify error:", e);
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          window.location.replace("login.html");
+        }
       });
 
       function parseReservationDateTime(dateStr, timeStr) {
@@ -783,14 +842,6 @@
       // ==========================================
       // CALENDAR & RESERVATION SLOTS LOGIC
       // ==========================================
-      let currentDate = new Date(), currentMonth = currentDate.getMonth(), currentYear = currentDate.getFullYear();
-      let reservationData = {};
-      const TOTAL_TABLES = 13;
-
-      onValue(ref(db, "reservationSlots"), (snapshot) => {
-        reservationData = snapshot.exists() ? snapshot.val() : {};
-        renderCalendar(currentMonth, currentYear);
-      });
 
       function renderCalendar(month, year) {
         const daysContainer = document.getElementById("calendarDays");
@@ -841,7 +892,8 @@
         document.getElementById("advanceOrderToggle").checked = false;
         document.getElementById("advanceMenuSection").classList.add("d-none");
         changeDate();
-        walkInModal.show();
+        const m = getWalkInModal();
+        if (m) m.show();
       };
 
       window.selectDate = function (dateStr) {
@@ -996,9 +1048,6 @@
       // ==========================================
       // ADVANCE ORDER LOGIC (COMBINED MENU + PHOTOS + FLAVORS)
       // ==========================================
-      let advanceCart = {}, currentMenuData = {};
-      let advanceMenuPromos = null;
-      let fullRestaurantMenu = null;
 
       function getItemImage(item) {
         if (item.image) return item.image;
@@ -1173,19 +1222,6 @@
         }
       }
 
-      onValue(ref(db, "advanceMenu"), (snapshot) => {
-        if (snapshot.exists()) {
-          advanceMenuPromos = snapshot.val();
-        }
-        renderCombinedAdvanceMenu();
-      });
-
-      onValue(ref(db, "menu"), (snapshot) => {
-        if (snapshot.exists()) {
-          fullRestaurantMenu = snapshot.val();
-        }
-        renderCombinedAdvanceMenu();
-      });
 
       window.updateCart = function (id, change) {
         if (!advanceCart[id]) advanceCart[id] = { ...currentMenuData[id], qty: 0 };
@@ -1288,7 +1324,8 @@
 
           // Reset everything
           btn.innerHTML = 'Confirm & Save Booking'; btn.disabled = false;
-          walkInModal.hide();
+          const m = getWalkInModal();
+          if (m) m.hide();
         } catch (error) {
           console.error(error);
           showWalkInError("Error saving reservation: " + (error.message || "Please try again."));
@@ -1296,8 +1333,16 @@
         }
       });
 
-      document.getElementById("adminLogoutBtn").addEventListener("click", () => {
-        signOut(auth).then(() => { window.location.href = "login.html"; });
+      document.getElementById("adminLogoutBtn")?.addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          if (window.clearUserSession) window.clearUserSession();
+          else sessionStorage.clear();
+          await signOut(auth);
+        } catch (err) {
+          console.warn("Sign out error:", err);
+        }
+        window.location.replace("login.html");
       });
     </script>
   </body>
