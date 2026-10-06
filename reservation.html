@@ -795,9 +795,10 @@
                 type="file"
                 id="resReceipt"
                 class="form-control"
-                accept="image/png, image/jpeg, image/jpg, image/webp"
+                accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp"
                 required
               />
+              <small class="text-muted d-block mt-1"><i class="fa-solid fa-circle-info me-1"></i> Max 20MB. PNG, JPG, or WEBP only (ZIP/PDF not accepted).</small>
               <input type="hidden" id="receiptBase64" />
             </div>
           </div>
@@ -1754,17 +1755,98 @@
           paymentModal.show();
         });
 
+      async function validateReceiptFile(file) {
+        if (!file) {
+          return { valid: false, error: "Please upload your payment receipt before submitting." };
+        }
+
+        // 1. Size constraint: 20MB limit (20 * 1024 * 1024 bytes)
+        const MAX_SIZE_BYTES = 20 * 1024 * 1024;
+        if (file.size > MAX_SIZE_BYTES) {
+          const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
+          return { valid: false, error: `File is too large (${sizeInMB}MB). Maximum allowed receipt size is 20MB.` };
+        }
+        if (file.size === 0) {
+          return { valid: false, error: "The selected file is empty. Please upload a valid receipt screenshot." };
+        }
+
+        // 2. Extension validation & archive blacklist
+        const fileName = (file.name || "").toLowerCase().trim();
+        const ext = fileName.includes(".") ? fileName.split(".").pop() : "";
+        const blockedExtensions = ["zip", "rar", "7z", "tar", "gz", "bz2", "iso", "exe", "bat", "cmd", "sh", "pdf", "docx", "xlsx"];
+        if (blockedExtensions.includes(ext)) {
+          return { valid: false, error: `Files of type .${ext.toUpperCase()} are strictly not allowed. Please upload a PNG, JPG, JPEG, or WEBP image.` };
+        }
+
+        const allowedExtensions = ["jpg", "jpeg", "png", "webp"];
+        if (!allowedExtensions.includes(ext)) {
+          return { valid: false, error: `Invalid file extension (.${ext || "unknown"}). Only PNG, JPG, JPEG, and WEBP image files are allowed.` };
+        }
+
+        // 3. MIME type validation
+        const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+        if (file.type && !allowedMimes.includes(file.type.toLowerCase())) {
+          return { valid: false, error: "Invalid file type. Only PNG, JPG, and WEBP image receipts are permitted." };
+        }
+
+        // 4. Magic bytes binary inspection (blocks renamed ZIP or non-images)
+        try {
+          const buffer = await file.slice(0, 16).arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+
+          // ZIP magic header 'PK\x03\x04', 'PK\x05\x06', 'PK\x07\x08'
+          if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+            return { valid: false, error: "ZIP archives are strictly not permitted. Please upload an image receipt (PNG, JPG, or WEBP)." };
+          }
+          // RAR
+          if (bytes[0] === 0x52 && bytes[1] === 0x61 && bytes[2] === 0x72 && bytes[3] === 0x21) {
+            return { valid: false, error: "Compressed archives are not permitted." };
+          }
+          // 7z
+          if (bytes[0] === 0x37 && bytes[1] === 0x7A && bytes[2] === 0xBC && bytes[3] === 0xAF) {
+            return { valid: false, error: "7-Zip archives are not permitted." };
+          }
+          // PDF
+          if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+            return { valid: false, error: "PDF documents are not permitted. Please upload an image receipt." };
+          }
+
+          const isJpeg = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
+          const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+          const isWebp = (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) &&
+                         (bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50);
+
+          if (!isJpeg && !isPng && !isWebp) {
+            return { valid: false, error: "The file header does not match a valid JPEG, PNG, or WEBP image. Please upload a genuine photo or screenshot." };
+          }
+        } catch (err) {
+          console.warn("Binary header verification note:", err);
+        }
+
+        return { valid: true };
+      }
+
+      const resReceiptInputEl = document.getElementById("resReceipt");
+      if (resReceiptInputEl) {
+        resReceiptInputEl.addEventListener("change", async (e) => {
+          clearPaymentError();
+          const file = e.target.files[0];
+          if (!file) return;
+          const check = await validateReceiptFile(file);
+          if (!check.valid) {
+            showPaymentError(check.error);
+            e.target.value = "";
+          }
+        });
+      }
+
       document.getElementById("confirmPayBtn").addEventListener("click", async () => {
         clearPaymentError();
         const fileInput = document.getElementById("resReceipt").files[0];
-        if (!fileInput) {
-          showPaymentError("Please upload your payment receipt before submitting.");
-          return;
-        }
-
-        const validImageTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
-        if (!validImageTypes.includes(fileInput.type) && !fileInput.type.startsWith("image/")) {
-          showPaymentError("Invalid file type. Please upload an image file (PNG, JPG, JPEG, WEBP) only.");
+        const check = await validateReceiptFile(fileInput);
+        if (!check.valid) {
+          showPaymentError(check.error);
+          document.getElementById("resReceipt").value = "";
           return;
         }
 

@@ -176,11 +176,16 @@
     </nav>
 
     <div class="main-content">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">Reservations & Walk-ins</h2>
-        <button class="btn btn-orange fw-bold shadow-sm" onclick="openWalkInModal()">
-          <i class="fa-solid fa-plus"></i> Add Reservation/Walk-in
-        </button>
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="fw-bold mb-0">Reservations & Walk-ins</h2>
+        <div class="d-flex gap-2 align-items-center">
+          <button class="btn btn-outline-secondary btn-sm fw-bold shadow-sm" id="refreshResBtn" title="Check & auto-cancel expired past reservations">
+            <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh Status
+          </button>
+          <button class="btn btn-orange fw-bold shadow-sm" onclick="openWalkInModal()">
+            <i class="fa-solid fa-plus"></i> Add Reservation/Walk-in
+          </button>
+        </div>
       </div>
 
       <ul class="nav nav-pills mb-3" id="resTabs">
@@ -480,6 +485,105 @@
       let fullRestaurantMenu = null;
       let isInitialized = false;
 
+      function isReservationPastDay(dateStr) {
+        if (!dateStr || typeof dateStr !== "string") return false;
+        const cleanStr = dateStr.split("T")[0].trim();
+        const parts = cleanStr.split(/[-/]/).map((p) => parseInt(p, 10));
+        if (parts.length < 3 || parts.some(isNaN)) return false;
+
+        let year, month, day;
+        if (parts[0] > 1000) {
+          // YYYY-MM-DD
+          year = parts[0];
+          month = parts[1] - 1;
+          day = parts[2];
+        } else if (parts[2] > 1000) {
+          // MM-DD-YYYY or DD-MM-YYYY
+          year = parts[2];
+          month = parts[0] - 1;
+          day = parts[1];
+        } else {
+          return false;
+        }
+
+        // End of that reservation day in local time (23:59:59.999)
+        const resEndOfDay = new Date(year, month, day, 23, 59, 59, 999).getTime();
+        if (isNaN(resEndOfDay)) return false;
+        return Date.now() > resEndOfDay;
+      }
+
+      let isAutoCancellingReservations = false;
+      async function autoCancelPastReservations(reservationsList, isManual = false) {
+        if (isAutoCancellingReservations || !reservationsList || reservationsList.length === 0) return;
+        isAutoCancellingReservations = true;
+
+        try {
+          // Target active, unseated reservations whose scheduled day has completely passed
+          const expiredReservations = reservationsList.filter((r) => 
+            (r.status === "approved" || r.status === "pending") && isReservationPastDay(r.date)
+          );
+
+          if (expiredReservations.length === 0) {
+            isAutoCancellingReservations = false;
+            return;
+          }
+
+          console.log(`[Auto-Cancel] Found ${expiredReservations.length} past unseated reservation(s) to auto-cancel.`);
+          const cancelReason = "Guest No-Show / Late Arrival Past Grace Period";
+
+          let paySnap = null;
+          try {
+            paySnap = await get(ref(db, "payments"));
+          } catch (pErr) {
+            console.warn("[Auto-Cancel] Could not fetch payments snapshot:", pErr);
+          }
+
+          for (const resObj of expiredReservations) {
+            try {
+              // 1. Release reserved table slot in reservationSlots if held
+              if (resObj.date && resObj.time && resObj.tableSize) {
+                const tableMatch = resObj.tableSize.match(/Table (\d+)/);
+                if (tableMatch) {
+                  const tableId = tableMatch[1];
+                  await remove(ref(db, `reservationSlots/${resObj.date}/${resObj.time}/tables/${tableId}`));
+                }
+              }
+
+              // 2. Mark reservation as cancelled with exact reason
+              await update(ref(db, "reservations/" + resObj.id), {
+                status: "cancelled",
+                rejectionReason: cancelReason,
+                cancellationReason: cancelReason,
+                cancelledBy: "system",
+                cancelledAt: Date.now()
+              });
+
+              // 3. Mark linked payment record as cancelled
+              if (paySnap && paySnap.exists()) {
+                paySnap.forEach((child) => {
+                  const pData = child.val();
+                  if (child.key === resObj.id || pData.reservationId === resObj.id) {
+                    update(ref(db, `payments/${child.key}`), {
+                      status: "cancelled",
+                      rejectionReason: cancelReason,
+                      cancellationReason: cancelReason,
+                      cancelledBy: "system",
+                      cancelledAt: Date.now()
+                    });
+                  }
+                });
+              }
+            } catch (itemErr) {
+              console.error(`[Auto-Cancel] Failed auto-cancelling reservation ${resObj.id}:`, itemErr);
+            }
+          }
+        } catch (err) {
+          console.error("[Auto-Cancel] Global error during auto-cancellation:", err);
+        } finally {
+          isAutoCancellingReservations = false;
+        }
+      }
+
       function initAdminReservations() {
         if (isInitialized) return;
         isInitialized = true;
@@ -492,7 +596,38 @@
             });
           }
           renderTable();
+          // Daily validation: automatically cancel past unseated reservations whose date has passed
+          autoCancelPastReservations(allRes);
         });
+
+        // Recurring background check: check every 60 seconds
+        setInterval(() => {
+          if (allRes && allRes.length > 0) {
+            autoCancelPastReservations(allRes);
+          }
+        }, 60000);
+
+        // Check on window focus and visibility change
+        window.addEventListener("focus", () => {
+          if (allRes && allRes.length > 0) autoCancelPastReservations(allRes);
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden && allRes && allRes.length > 0) autoCancelPastReservations(allRes);
+        });
+
+        const refreshBtn = document.getElementById("refreshResBtn");
+        if (refreshBtn) {
+          refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector("i");
+            if (icon) icon.classList.add("fa-spin");
+            refreshBtn.disabled = true;
+            await autoCancelPastReservations(allRes, true);
+            setTimeout(() => {
+              if (icon) icon.classList.remove("fa-spin");
+              refreshBtn.disabled = false;
+            }, 600);
+          });
+        }
 
         onValue(ref(db, "reservationSlots"), (snapshot) => {
           reservationData = snapshot.exists() ? snapshot.val() : {};
