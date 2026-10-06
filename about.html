@@ -93,6 +93,9 @@
             color: white;
             border-radius: 50px;
             padding: 10px 28px;
+            font-size: 1rem;
+            line-height: 1.5;
+            display: inline-block;
             font-weight: bold;
             border: none;
             transition: transform 0.2s, background-color 0.2s;
@@ -270,7 +273,7 @@
           </div>
 
           <div id="authSection" class="d-none d-lg-block">
-              <a href="login.html" class="btn-orange">Login</a>
+              <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>
           </div>
           <script>if (window.renderPreloadedNavbar) window.renderPreloadedNavbar("authSection", "authSectionMobile");</script>
       </div>
@@ -558,15 +561,7 @@
   <footer class="bg-dark text-white text-center py-4">
       <div class="container">
           <h4 style="color: var(--toms-orange);">Tom's Chicken</h4>
-          <p class="small text-muted mb-3">Experience the best flavored wings in town. Crispy, spicy, and refillable.</p>
-          <div class="d-flex justify-content-center gap-3 mb-3">
-              <a href="index.html" class="text-white text-decoration-none small">Home</a>
-              <span class="text-muted">•</span>
-              <a href="about.html" class="text-white text-decoration-none small">About</a>
-              <span class="text-muted">•</span>
-              <a href="contact.html" class="text-white text-decoration-none small">Contact</a>
-          </div>
-          <p class="small text-muted mb-0">&copy; 2026 Tom's Chicken. All Rights Reserved.</p>
+          <p class="small mb-0">&copy; 2026. All Rights Reserved.</p>
       </div>
   </footer>
 
@@ -670,11 +665,12 @@
       }
 
       function renderGuestNav() {
-          if (authSection) {
-              authSection.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          const guestHtml = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          if (authSection && authSection.innerHTML !== guestHtml) {
+              authSection.innerHTML = guestHtml;
           }
-          if (authSectionMobile) {
-              authSectionMobile.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          if (authSectionMobile && authSectionMobile.innerHTML !== guestHtml) {
+              authSectionMobile.innerHTML = guestHtml;
           }
       }
 

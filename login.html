@@ -255,17 +255,32 @@
                 return;
               }
             } else if (userData.role === "customer") {
-              window.location.replace("index.html");
-              return;
+              if (userData.status === "active") {
+                sessionStorage.setItem("toms_user_role", "customer");
+                sessionStorage.setItem("toms_user_name", user.email);
+                sessionStorage.setItem("toms_user_initial", user.email.charAt(0).toUpperCase());
+                window.location.replace("index.html");
+                return;
+              } else {
+                isRedirecting = false;
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                await signOut(auth);
+                showLoginForm();
+                showError("Access Denied: Your account has been deactivated.");
+                return;
+              }
             }
+          } else {
+            // Incomplete or non-existent registration - no profile in database
+            isRedirecting = false;
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            await signOut(auth);
+            showLoginForm();
+            showError("This account is not registered. Please sign up first.");
+            return;
           }
-          if (window.cacheUserSession) {
-            window.cacheUserSession(user, { role: "customer" });
-          }
-          sessionStorage.setItem("toms_user_role", "customer");
-          sessionStorage.setItem("toms_user_name", user.email);
-          sessionStorage.setItem("toms_user_initial", user.email.charAt(0).toUpperCase());
-          window.location.replace("index.html");
         } catch (err) {
           console.error("Session verification error:", err);
           isRedirecting = false;
@@ -367,12 +382,25 @@
                 );
               }
             } else if (userData.role === "customer") {
-              window.location.replace("index.html");
+              if (userData.status === "active") {
+                window.location.replace("index.html");
+              } else {
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                await signOut(auth);
+                showError("Access Denied: Your account has been deactivated.");
+              }
             } else {
+              if (window.clearUserSession) window.clearUserSession();
+              else sessionStorage.clear();
+              await signOut(auth);
               showError("Error: Account role not defined.");
             }
           } else {
-            showError("User data not found in database.");
+            if (window.clearUserSession) window.clearUserSession();
+            else sessionStorage.clear();
+            await signOut(auth);
+            showError("This account is not registered. Please sign up first.");
           }
         } catch (error) {
           console.error(error); // Logs full error on terminal for debugging

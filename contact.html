@@ -93,6 +93,9 @@
             color: white;
             border-radius: 50px;
             padding: 10px 28px;
+            font-size: 1rem;
+            line-height: 1.5;
+            display: inline-block;
             font-weight: bold;
             border: none;
             transition: transform 0.2s, background-color 0.2s;
@@ -230,7 +233,7 @@
           </div>
 
           <div id="authSection" class="d-none d-lg-block">
-              <a href="login.html" class="btn-orange">Login</a>
+              <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>
           </div>
           <script>if (window.renderPreloadedNavbar) window.renderPreloadedNavbar("authSection", "authSectionMobile");</script>
       </div>
@@ -311,6 +314,8 @@
                                   <label class="form-label fw-bold small text-muted">Topic / Category</label>
                                   <select id="senderTopic" class="form-select" required>
                                       <option value="General Inquiry" selected>General Inquiry</option>
+                                      <option value="Complaint">Complaint</option>
+                                      <option value="Staff & Service Feedback">Staff & Service Feedback</option>
                                       <option value="Reservation Question">Reservation Question</option>
                                       <option value="Bulk / Barkada Order">Bulk / Barkada Order</option>
                                       <option value="Customer Feedback">Customer Feedback</option>
@@ -394,15 +399,7 @@
   <footer class="bg-dark text-white text-center py-4">
       <div class="container">
           <h4 style="color: var(--toms-orange);">Tom's Chicken</h4>
-          <p class="small text-muted mb-3">Experience the best flavored wings in town. Crispy, spicy, and refillable.</p>
-          <div class="d-flex justify-content-center gap-3 mb-3">
-              <a href="index.html" class="text-white text-decoration-none small">Home</a>
-              <span class="text-muted">•</span>
-              <a href="about.html" class="text-white text-decoration-none small">About</a>
-              <span class="text-muted">•</span>
-              <a href="contact.html" class="text-white text-decoration-none small">Contact</a>
-          </div>
-          <p class="small text-muted mb-0">&copy; 2026 Tom's Chicken. All Rights Reserved.</p>
+          <p class="small mb-0">&copy; 2026. All Rights Reserved.</p>
       </div>
   </footer>
 
@@ -507,11 +504,12 @@
       }
 
       function renderGuestNav() {
-          if (authSection) {
-              authSection.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          const guestHtml = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          if (authSection && authSection.innerHTML !== guestHtml) {
+              authSection.innerHTML = guestHtml;
           }
-          if (authSectionMobile) {
-              authSectionMobile.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+          if (authSectionMobile && authSectionMobile.innerHTML !== guestHtml) {
+              authSectionMobile.innerHTML = guestHtml;
           }
       }
 
@@ -527,10 +525,39 @@
           }
       });
 
+      function autoFillContactForm(name, email, phone) {
+          const nameInput = document.getElementById("senderName");
+          const emailInput = document.getElementById("senderEmail");
+          const phoneInput = document.getElementById("senderPhone");
+
+          if (nameInput && name) {
+              nameInput.value = name;
+          }
+          if (emailInput && email) {
+              emailInput.value = email;
+          }
+          if (phoneInput && phone && !phoneInput.value) {
+              phoneInput.value = phone;
+          }
+      }
+
+      // Check preloaded session cache immediately on page load
+      try {
+          const isSessionActive = (sessionStorage.getItem("toms_user_logged_in") === "true") || (localStorage.getItem("toms_user_logged_in") === "true");
+          if (isSessionActive) {
+              const cachedName = sessionStorage.getItem("toms_user_name") || localStorage.getItem("toms_user_name") || "";
+              const cachedEmail = sessionStorage.getItem("toms_user_email") || localStorage.getItem("toms_user_email") || "";
+              if (cachedEmail) {
+                  autoFillContactForm(cachedName, cachedEmail);
+              }
+          }
+      } catch (e) {}
+
       onAuthStateChanged(auth, async (user) => {
           currentUser = user;
           if (user) {
               let name = user.email;
+              let phone = "";
               try {
                   const snap = await get(ref(db, "users/" + user.uid));
                   if (snap.exists()) {
@@ -542,6 +569,7 @@
                       }
                       const fullName = ((val.firstName || "") + " " + (val.lastName || "")).trim();
                       if (fullName) name = fullName;
+                      phone = val.phone || val.phoneNumber || "";
                   }
               } catch (e) {
                   console.error("Auth check error:", e);
@@ -553,10 +581,21 @@
 
               const initial = (name.charAt(0) || user.email.charAt(0) || "U").toUpperCase();
               renderUserNav(initial, name, user.email);
+
+              // Auto-fill logged-in user credentials
+              autoFillContactForm(name, user.email, phone);
           } else {
               if (window.clearUserSession) window.clearUserSession();
               else sessionStorage.clear();
               renderGuestNav();
+
+              // For guests, keep inputs clear
+              const nameInput = document.getElementById("senderName");
+              const emailInput = document.getElementById("senderEmail");
+              const phoneInput = document.getElementById("senderPhone");
+              if (nameInput) nameInput.value = "";
+              if (emailInput) emailInput.value = "";
+              if (phoneInput) phoneInput.value = "";
           }
       });
 
@@ -589,17 +628,28 @@
               phone: document.getElementById("senderPhone").value.trim() || "N/A",
               topic: document.getElementById("senderTopic").value,
               message: document.getElementById("senderMessage").value.trim(),
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              read: false
           };
 
           try {
               await push(ref(db, "inquiries"), inquiryData);
-              document.getElementById("contactForm").reset();
+              if (currentUser) {
+                  document.getElementById("senderTopic").selectedIndex = 0;
+                  document.getElementById("senderMessage").value = "";
+              } else {
+                  document.getElementById("contactForm").reset();
+              }
               messageSentModal.show();
           } catch (error) {
               console.warn("Realtime DB write info:", error);
               // Show confirmation to user even if offline/fallback
-              document.getElementById("contactForm").reset();
+              if (currentUser) {
+                  document.getElementById("senderTopic").selectedIndex = 0;
+                  document.getElementById("senderMessage").value = "";
+              } else {
+                  document.getElementById("contactForm").reset();
+              }
               messageSentModal.show();
           } finally {
               btn.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i> Submit Message';

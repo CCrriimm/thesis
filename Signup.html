@@ -95,6 +95,9 @@
               placeholder="username@example.com"
               required
             />
+            <div id="emailFeedback" class="small fw-bold text-danger d-none mt-1">
+              <i class="fa-solid fa-circle-exclamation me-1"></i> Please enter a valid email address (e.g. name@example.com).
+            </div>
           </div>
           <div class="mb-2">
             <label class="form-label fw-bold small">Phone Number</label>
@@ -158,10 +161,29 @@
             </div>
           </div>
 
+          <!-- Verification Method Selector -->
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-muted d-block">Verification Method</label>
+            <div class="btn-group w-100" role="group" aria-label="Verification Method">
+              <input type="radio" class="btn-check" name="verifyMethod" id="methodEmail" value="email" checked autocomplete="off">
+              <label class="btn btn-outline-warning text-dark fw-bold small py-2" for="methodEmail">
+                <i class="fa-solid fa-envelope me-1 text-primary"></i> Email (Recommended)
+              </label>
+
+              <input type="radio" class="btn-check" name="verifyMethod" id="methodPhone" value="phone" autocomplete="off">
+              <label class="btn btn-outline-warning text-dark fw-bold small py-2" for="methodPhone">
+                <i class="fa-solid fa-mobile-screen-button me-1"></i> Phone SMS
+              </label>
+            </div>
+            <small class="text-muted d-block mt-1" id="methodHint" style="font-size: 0.75rem;">
+              <i class="fa-solid fa-circle-info text-primary me-1"></i> We'll send a fast verification link to your email.
+            </small>
+          </div>
+
           <button
             type="submit"
             id="signupBtn"
-            class="btn w-100 py-2 text-white fw-bold shadow-sm mt-3"
+            class="btn w-100 py-2 text-white fw-bold shadow-sm mt-2"
             style="background-color: #f57d10ff"
           >
             VERIFY & REGISTER
@@ -175,6 +197,86 @@
             >Login</a
           ></small
         >
+      </div>
+    </div>
+
+    <!-- Email Link Verification Modal -->
+    <div
+      class="modal fade"
+      id="emailModal"
+      tabindex="-1"
+      data-bs-backdrop="static"
+    >
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div
+            class="modal-header text-white"
+            style="background-color: #f57d10ff"
+          >
+            <h5 class="modal-title fw-bold">
+              <i class="fa-solid fa-envelope-circle-check me-2"></i> Verify Your Email Address
+            </h5>
+          </div>
+          <div class="modal-body text-center p-4">
+            <div id="emailPendingState">
+              <div class="position-relative d-inline-block mb-3">
+                <i class="fa-solid fa-envelope-open-text fs-1" style="color: #f57d10ff"></i>
+              </div>
+              <h5 class="fw-bold mb-1">Check Your Inbox</h5>
+              <p class="text-muted small mb-2">We sent an official verification link to:</p>
+              <h5 class="fw-bold mb-3 text-dark text-break" id="verifyEmailDisplay">user@example.com</h5>
+
+              <div class="alert alert-warning small py-2 px-3 mb-3 text-start border-0 shadow-sm" style="background-color: #fff8e6;">
+                <div class="d-flex align-items-center">
+                  <div class="spinner-grow spinner-grow-sm text-warning me-2" role="status"></div>
+                  <span class="fw-bold text-dark">Waiting for verification...</span>
+                </div>
+                <div class="text-muted small mt-1" style="font-size: 0.78rem;">
+                  Click the link in your email, then return here. This page will automatically complete your registration.
+                </div>
+              </div>
+
+              <div id="emailResendAlert" class="alert alert-success small py-2 px-3 mb-3 d-none">
+                <i class="fa-solid fa-circle-check me-1"></i> <span id="emailResendMsg"></span>
+              </div>
+
+              <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                <button
+                  type="button"
+                  id="checkEmailNowBtn"
+                  class="btn btn-sm btn-outline-secondary fw-bold"
+                >
+                  <i class="fa-solid fa-rotate me-1"></i> I Already Clicked It
+                </button>
+                <button
+                  type="button"
+                  id="resendEmailBtn"
+                  class="btn btn-sm btn-link text-decoration-none text-muted"
+                  disabled
+                >
+                  Resend Email in <span id="emailResendTimer">60</span>s
+                </button>
+              </div>
+            </div>
+
+            <!-- Email Verified Success State inside modal -->
+            <div id="emailVerifiedState" class="d-none py-3">
+              <i class="fa-solid fa-circle-check text-success fs-1 mb-3"></i>
+              <h4 class="fw-bold text-success mb-2">Email Verified!</h4>
+              <p class="text-muted small mb-0">Saving your account profile and redirecting to home...</p>
+              <div class="spinner-border spinner-border-sm text-warning mt-3" role="status"></div>
+            </div>
+          </div>
+          <div class="modal-footer justify-content-between" id="emailModalFooter">
+            <button
+              type="button"
+              class="btn btn-outline-danger btn-sm"
+              id="cancelEmailBtn"
+            >
+              <i class="fa-solid fa-xmark me-1"></i> Cancel & Change Email
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -290,6 +392,11 @@
         set, 
         get,
         onAuthStateChanged,
+        signOut,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        sendEmailVerification,
+        deleteUser,
         RecaptchaVerifier,
         signInWithPhoneNumber,
         linkWithCredential,
@@ -302,13 +409,18 @@
         if (user && !pendingRegistration) {
           try {
             const snap = await get(ref(db, "users/" + user.uid));
-            if (snap.exists() && snap.val().role === "admin") {
-              window.location.replace("admin.html");
+            if (snap.exists()) {
+              if (snap.val().role === "admin") {
+                window.location.replace("admin.html");
+              } else {
+                window.location.replace("index.html");
+              }
             } else {
-              window.location.replace("index.html");
+              // Leftover session without database record - clean up
+              await signOut(auth);
             }
           } catch (e) {
-            window.location.replace("index.html");
+            console.warn("Auth state check:", e);
           }
         }
       });
@@ -319,7 +431,25 @@
       const matchMsg = document.getElementById("matchMsg");
       const errorAlert = document.getElementById("error-alert");
       const otpModal = new bootstrap.Modal(document.getElementById("otpModal"));
+      const emailModal = new bootstrap.Modal(document.getElementById("emailModal"));
       const regSuccessModal = new bootstrap.Modal(document.getElementById("regSuccessModal"));
+
+      const methodEmailRadio = document.getElementById("methodEmail");
+      const methodPhoneRadio = document.getElementById("methodPhone");
+      const methodHint = document.getElementById("methodHint");
+      const signupBtn = document.getElementById("signupBtn");
+
+      function updateMethodUI() {
+        if (methodPhoneRadio && methodPhoneRadio.checked) {
+          signupBtn.textContent = "SEND SMS & REGISTER";
+          methodHint.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i> SMS verification is subject to carrier limits (10/day).';
+        } else {
+          signupBtn.textContent = "VERIFY & REGISTER";
+          methodHint.innerHTML = '<i class="fa-solid fa-circle-info text-primary me-1"></i> We\'ll send a fast verification link to your email.';
+        }
+      }
+      if (methodEmailRadio) methodEmailRadio.addEventListener("change", updateMethodUI);
+      if (methodPhoneRadio) methodPhoneRadio.addEventListener("change", updateMethodUI);
 
       // Bootstrap Tooltips
       const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
@@ -327,6 +457,9 @@
 
       let pendingRegistration = null;
       let resendCountdownInterval = null;
+      let emailWatcherInterval = null;
+      let emailResendCooldownInterval = null;
+      let isFinalizing = false;
 
       // Initialize invisible reCAPTCHA for Firebase Phone Auth background verification
       function getRecaptchaVerifier() {
@@ -403,6 +536,27 @@
         }
       });
 
+      // Email Validation
+      const emailInput = document.getElementById("email");
+      const emailFeedback = document.getElementById("emailFeedback");
+
+      function isValidEmail(email) {
+        // Enforces username@domain.tld with at least 2 char extension (.com, .ph, .net, etc.)
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        return emailRegex.test(email);
+      }
+
+      emailInput.addEventListener("input", () => {
+        const val = emailInput.value.trim();
+        if (val.length > 0 && !isValidEmail(val)) {
+          emailInput.classList.add("is-invalid");
+          emailFeedback.classList.remove("d-none");
+        } else {
+          emailInput.classList.remove("is-invalid");
+          emailFeedback.classList.add("d-none");
+        }
+      });
+
       // Philippine Phone Number Formatting & Validation (E.164)
       function formatPhilippinePhone(phoneRaw) {
         let cleaned = phoneRaw.replace(/[\s\-\(\)]/g, "");
@@ -457,7 +611,17 @@
           return;
         }
 
-        // 2. Phone Validation
+        // 2. Email Validation
+        const emailVal = emailInput.value.trim();
+        if (!isValidEmail(emailVal)) {
+          emailInput.classList.add("is-invalid");
+          emailFeedback.classList.remove("d-none");
+          showError("Please enter a valid email address with '@' and a domain (e.g. name@example.com).");
+          emailInput.focus();
+          return;
+        }
+
+        // 3. Phone Validation
         const rawPhone = document.getElementById("phone").value.trim();
         const formattedPhone = formatPhilippinePhone(rawPhone);
         if (!isValidPhilippineMobile(formattedPhone)) {
@@ -465,62 +629,355 @@
           return;
         }
 
-        const emailVal = document.getElementById("email").value.trim();
         const fnameVal = document.getElementById("fname").value.trim();
         const lnameVal = document.getElementById("lname").value.trim();
+        if (!fnameVal || !lnameVal) {
+          showError("Please enter both your first and last name.");
+          return;
+        }
+
         const signupBtn = document.getElementById("signupBtn");
 
-        signupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Sending SMS Verification Code...';
-        signupBtn.disabled = true;
+        const verifyMethod = document.querySelector('input[name="verifyMethod"]:checked')?.value || "email";
 
-        try {
-          pendingRegistration = {
-            fname: fnameVal,
-            lname: lnameVal,
-            email: emailVal,
-            phone: formattedPhone,
-            pass: p1
-          };
+        if (verifyMethod === "email") {
+          signupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Sending Verification Link...';
+          signupBtn.disabled = true;
 
-          // Send real SMS via Firebase Phone Auth with invisible background verifier
-          const appVerifier = getRecaptchaVerifier();
-          const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
-          window.confirmationResult = confirmationResult;
+          try {
+            pendingRegistration = {
+              fname: fnameVal,
+              lname: lnameVal,
+              email: emailVal,
+              phone: formattedPhone,
+              pass: p1
+            };
 
-          signupBtn.innerHTML = "VERIFY & REGISTER";
-          signupBtn.disabled = false;
-
-          document.getElementById("otpPhoneDisplay").textContent = formattedPhone;
-          document.getElementById("otpInput").value = "";
-          document.getElementById("otpError").classList.add("d-none");
-
-          startResendCooldown();
-          otpModal.show();
-        } catch (error) {
-          console.error("Firebase SMS Send Error:", error);
-          signupBtn.innerHTML = "VERIFY & REGISTER";
-          signupBtn.disabled = false;
-
-          // Reset invisible verifier so user can retry immediately
-          if (window.recaptchaVerifier) {
+            let activeUser = null;
             try {
-              window.recaptchaVerifier.clear();
-            } catch (e) {}
-            window.recaptchaVerifier = null;
-          }
+              const userCredential = await createUserWithEmailAndPassword(auth, emailVal, p1);
+              activeUser = userCredential.user;
+            } catch (createErr) {
+              if (createErr.code === "auth/email-already-in-use") {
+                // Check if this email is an actual active registered user in Realtime Database
+                let isAlreadyInDb = false;
+                try {
+                  const usersSnap = await get(ref(db, "users"));
+                  if (usersSnap.exists()) {
+                    const allUsers = usersSnap.val();
+                    for (const uid in allUsers) {
+                      if (allUsers[uid]?.email && allUsers[uid].email.toLowerCase() === emailVal.toLowerCase()) {
+                        isAlreadyInDb = true;
+                        break;
+                      }
+                    }
+                  }
+                } catch (e) {
+                  console.warn("DB check error:", e);
+                }
 
-          if (error.code === "auth/invalid-phone-number") {
-            showError("The phone number format is invalid. Please enter an 11-digit mobile number (e.g. 09123456789).");
-          } else if (error.code === "auth/too-many-requests") {
-            showError("Too many SMS attempts sent. Please wait a few moments before trying again.");
-          } else if (error.code === "auth/quota-exceeded") {
-            showError("Daily SMS quota exceeded. Please contact restaurant administration.");
-          } else if (error.code === "auth/captcha-check-failed") {
-            showError("Security verification failed. Please refresh and try again.");
-          } else {
-            showError("Could not send SMS code: " + error.message);
+                if (isAlreadyInDb) {
+                  signupBtn.innerHTML = "VERIFY & REGISTER";
+                  signupBtn.disabled = false;
+                  showError("This email address is already registered to an active account. Please log in.");
+                  return;
+                }
+
+                // If NOT in the database, this was an abandoned incomplete registration!
+                // Sign in with the entered password, delete the unverified orphan, and re-create fresh!
+                try {
+                  const orphanCred = await signInWithEmailAndPassword(auth, emailVal, p1);
+                  await deleteUser(orphanCred.user);
+                  const freshCred = await createUserWithEmailAndPassword(auth, emailVal, p1);
+                  activeUser = freshCred.user;
+                } catch (orphanErr) {
+                  signupBtn.innerHTML = "VERIFY & REGISTER";
+                  signupBtn.disabled = false;
+                  showError("An unverified registration attempt with this email already exists. Please log in with your previous password or reset password.");
+                  return;
+                }
+              } else {
+                throw createErr;
+              }
+            }
+
+            // Send official verification email link
+            await sendEmailVerification(activeUser);
+
+            signupBtn.innerHTML = "VERIFY & REGISTER";
+            signupBtn.disabled = false;
+
+            document.getElementById("verifyEmailDisplay").textContent = emailVal;
+            document.getElementById("emailPendingState").classList.remove("d-none");
+            document.getElementById("emailVerifiedState").classList.add("d-none");
+            document.getElementById("emailModalFooter").classList.remove("d-none");
+            document.getElementById("emailResendAlert").classList.add("d-none");
+
+            startEmailWatcher();
+            startEmailResendCooldown();
+            emailModal.show();
+          } catch (error) {
+            console.error("Firebase Email Verification Error:", error);
+            signupBtn.innerHTML = "VERIFY & REGISTER";
+            signupBtn.disabled = false;
+
+            if (error.code === "auth/email-already-in-use") {
+              showError("This email address is already registered to an account. Please log in.");
+            } else if (error.code === "auth/invalid-email") {
+              showError("Invalid email address format.");
+            } else if (error.code === "auth/too-many-requests") {
+              showError("Too many attempts. Please wait a few moments before trying again.");
+            } else {
+              showError("Could not send verification email: " + error.message);
+            }
+          }
+        } else {
+          // Phone SMS flow
+          signupBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Sending SMS Verification Code...';
+          signupBtn.disabled = true;
+
+          try {
+            pendingRegistration = {
+              fname: fnameVal,
+              lname: lnameVal,
+              email: emailVal,
+              phone: formattedPhone,
+              pass: p1
+            };
+
+            // Send real SMS via Firebase Phone Auth with invisible background verifier
+            const appVerifier = getRecaptchaVerifier();
+            const confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
+            window.confirmationResult = confirmationResult;
+
+            signupBtn.innerHTML = "SEND SMS & REGISTER";
+            signupBtn.disabled = false;
+
+            document.getElementById("otpPhoneDisplay").textContent = formattedPhone;
+            document.getElementById("otpInput").value = "";
+            document.getElementById("otpError").classList.add("d-none");
+
+            startResendCooldown();
+            otpModal.show();
+          } catch (error) {
+            console.error("Firebase SMS Send Error:", error);
+            signupBtn.innerHTML = "SEND SMS & REGISTER";
+            signupBtn.disabled = false;
+
+            // Reset invisible verifier so user can retry immediately
+            if (window.recaptchaVerifier) {
+              try {
+                window.recaptchaVerifier.clear();
+              } catch (e) {}
+                window.recaptchaVerifier = null;
+            }
+
+            if (error.code === "auth/invalid-phone-number") {
+              showError("The phone number format is invalid. Please enter an 11-digit mobile number (e.g. 09123456789).");
+            } else if (error.code === "auth/too-many-requests") {
+              showError("Too many SMS attempts sent. Please wait a few moments before trying again.");
+            } else if (error.code === "auth/quota-exceeded") {
+              showError("Daily SMS quota exceeded (10/day limit). Please choose Email Verification instead.");
+            } else if (error.code === "auth/captcha-check-failed") {
+              showError("Security verification failed. Please refresh and try again.");
+            } else {
+              showError("Could not send SMS code: " + error.message);
+            }
           }
         }
+      });
+
+      function startEmailWatcher() {
+        stopEmailWatcher();
+        isFinalizing = false;
+
+        async function checkVerification() {
+          if (!auth.currentUser || isFinalizing) return;
+          try {
+            await auth.currentUser.reload();
+            if (auth.currentUser.emailVerified) {
+              isFinalizing = true;
+              stopEmailWatcher();
+              await completeEmailRegistration(auth.currentUser);
+            }
+          } catch (err) {
+            console.warn("Reload check error:", err);
+          }
+        }
+
+        // Run check immediately
+        checkVerification();
+        // Background polling fallback every 2.5s
+        emailWatcherInterval = setInterval(checkVerification, 2500);
+
+        // Instant detection when user switches back to this tab
+        window._emailFocusHandler = checkVerification;
+        window.addEventListener("focus", window._emailFocusHandler);
+        window._emailVisibilityHandler = () => {
+          if (document.visibilityState === "visible") checkVerification();
+        };
+        document.addEventListener("visibilitychange", window._emailVisibilityHandler);
+      }
+
+      function stopEmailWatcher() {
+        if (emailWatcherInterval) {
+          clearInterval(emailWatcherInterval);
+          emailWatcherInterval = null;
+        }
+        if (window._emailFocusHandler) {
+          window.removeEventListener("focus", window._emailFocusHandler);
+          window._emailFocusHandler = null;
+        }
+        if (window._emailVisibilityHandler) {
+          document.removeEventListener("visibilitychange", window._emailVisibilityHandler);
+          window._emailVisibilityHandler = null;
+        }
+      }
+
+      function startEmailResendCooldown() {
+        const resendBtn = document.getElementById("resendEmailBtn");
+        let seconds = 60;
+        resendBtn.disabled = true;
+        resendBtn.innerHTML = 'Resend Email in <span id="emailResendTimer">60</span>s';
+        if (emailResendCooldownInterval) clearInterval(emailResendCooldownInterval);
+
+        emailResendCooldownInterval = setInterval(() => {
+          seconds--;
+          const timerEl = document.getElementById("emailResendTimer");
+          if (timerEl) timerEl.textContent = seconds;
+          if (seconds <= 0) {
+            clearInterval(emailResendCooldownInterval);
+            resendBtn.disabled = false;
+            resendBtn.innerHTML = '<i class="fa-solid fa-rotate-right me-1"></i> Resend Verification Email';
+          }
+        }, 1000);
+      }
+
+      async function completeEmailRegistration(user) {
+        // Switch modal to verified success state
+        document.getElementById("emailPendingState").classList.add("d-none");
+        document.getElementById("emailVerifiedState").classList.remove("d-none");
+        document.getElementById("emailModalFooter").classList.add("d-none");
+
+        try {
+          // 1. Update Display Name in Firebase Auth
+          await updateProfile(user, {
+            displayName: `${pendingRegistration.fname} ${pendingRegistration.lname}`
+          });
+
+          // 2. Commit customer profile to Realtime Database ONLY upon confirmed verification
+          await set(ref(db, "users/" + user.uid), {
+            firstName: pendingRegistration.fname,
+            lastName: pendingRegistration.lname,
+            email: pendingRegistration.email,
+            phone: pendingRegistration.phone,
+            role: "customer",
+            status: "active",
+            emailVerified: true,
+            phoneVerified: false,
+            createdAt: Date.now()
+          });
+
+          // 3. Cache user session
+          if (window.cacheUserSession) {
+            window.cacheUserSession(user, {
+              firstName: pendingRegistration.fname,
+              lastName: pendingRegistration.lname,
+              role: "customer"
+            });
+          }
+          sessionStorage.setItem("toms_user_role", "customer");
+          sessionStorage.setItem("toms_user_name", `${pendingRegistration.fname} ${pendingRegistration.lname}`);
+          sessionStorage.setItem("toms_user_initial", pendingRegistration.fname.charAt(0).toUpperCase());
+          sessionStorage.setItem("toms_user_logged_in", "true");
+
+          // 4. Smooth redirect to customer dashboard
+          setTimeout(() => {
+            window.location.replace("index.html");
+          }, 1200);
+        } catch (err) {
+          console.error("Complete registration error:", err);
+          showError("Account verified, but profile setup failed: " + err.message);
+          emailModal.hide();
+        }
+      }
+
+      // Manual recheck button inside email modal
+      document.getElementById("checkEmailNowBtn").addEventListener("click", async () => {
+        const checkBtn = document.getElementById("checkEmailNowBtn");
+        checkBtn.disabled = true;
+        checkBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Checking...';
+
+        if (auth.currentUser) {
+          try {
+            await auth.currentUser.reload();
+            if (auth.currentUser.emailVerified) {
+              stopEmailWatcher();
+              await completeEmailRegistration(auth.currentUser);
+              return;
+            } else {
+              const resendAlert = document.getElementById("emailResendAlert");
+              const resendMsg = document.getElementById("emailResendMsg");
+              resendMsg.textContent = "Email is not verified yet. Please click the link in your inbox first.";
+              resendAlert.className = "alert alert-warning small py-2 px-3 mb-3";
+              resendAlert.classList.remove("d-none");
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        }
+        checkBtn.disabled = false;
+        checkBtn.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> I Already Clicked It';
+      });
+
+      // Resend email verification link
+      document.getElementById("resendEmailBtn").addEventListener("click", async () => {
+        if (!auth.currentUser || !pendingRegistration) return;
+        const resendBtn = document.getElementById("resendEmailBtn");
+        const resendAlert = document.getElementById("emailResendAlert");
+        const resendMsg = document.getElementById("emailResendMsg");
+
+        resendBtn.disabled = true;
+        resendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Resending...';
+        resendAlert.classList.add("d-none");
+
+        try {
+          await sendEmailVerification(auth.currentUser);
+          resendMsg.textContent = "A fresh verification link has been sent to your email!";
+          resendAlert.className = "alert alert-success small py-2 px-3 mb-3";
+          resendAlert.classList.remove("d-none");
+          startEmailResendCooldown();
+        } catch (err) {
+          console.error("Resend email error:", err);
+          resendBtn.disabled = false;
+          resendBtn.innerHTML = '<i class="fa-solid fa-rotate-right me-1"></i> Resend Verification Email';
+          resendMsg.textContent = "Could not resend email: " + err.message;
+          resendAlert.className = "alert alert-danger small py-2 px-3 mb-3";
+          resendAlert.classList.remove("d-none");
+        }
+      });
+
+      // Cancel button inside email modal - purges unverified auth user to free up the email immediately
+      document.getElementById("cancelEmailBtn").addEventListener("click", async () => {
+        stopEmailWatcher();
+        if (emailResendCooldownInterval) clearInterval(emailResendCooldownInterval);
+        const cancelBtn = document.getElementById("cancelEmailBtn");
+        cancelBtn.disabled = true;
+        cancelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Cancelling...';
+
+        try {
+          if (auth.currentUser) {
+            await deleteUser(auth.currentUser);
+          }
+        } catch (err) {
+          console.warn("Could not delete unverified user on cancel:", err);
+          try { await signOut(auth); } catch (e) {}
+        }
+
+        pendingRegistration = null;
+        cancelBtn.disabled = false;
+        cancelBtn.innerHTML = '<i class="fa-solid fa-xmark me-1"></i> Cancel & Change Email';
+        emailModal.hide();
       });
 
       // Verify SMS Code
@@ -578,6 +1035,7 @@
             role: "customer",
             status: "active",
             phoneVerified: true,
+            emailVerified: false,
             createdAt: Date.now()
           });
 

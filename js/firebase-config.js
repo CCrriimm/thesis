@@ -12,7 +12,9 @@ import {
     signInWithPhoneNumber,
     linkWithCredential,
     EmailAuthProvider,
-    updateProfile
+    updateProfile,
+    sendEmailVerification,
+    deleteUser
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
@@ -62,5 +64,7 @@ export {
     signInWithPhoneNumber,
     linkWithCredential,
     EmailAuthProvider,
-    updateProfile
+    updateProfile,
+    sendEmailVerification,
+    deleteUser
 };

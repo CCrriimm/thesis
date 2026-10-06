@@ -196,8 +196,9 @@
             const userRole = getSessionVal("toms_user_role");
 
             if (!loggedIn || userRole === "admin") {
-                if (sec) sec.innerHTML = '<a href="login.html" class="btn-orange">Login</a>';
-                if (secMob) secMob.innerHTML = '<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>';
+                const guestHtml = '<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>';
+                if (sec && sec.innerHTML !== guestHtml) sec.innerHTML = guestHtml;
+                if (secMob && secMob.innerHTML !== guestHtml) secMob.innerHTML = guestHtml;
                 return;
             }
 

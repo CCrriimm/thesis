@@ -165,7 +165,21 @@
     </nav>
 
     <div class="main-content">
-      <h2 class="fw-bold mb-4">Dashboard Overview</h2>
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="fw-bold mb-0">Dashboard Overview</h2>
+        <button
+          type="button"
+          class="btn text-white fw-bold px-3 py-2 shadow-sm d-flex align-items-center gap-2"
+          style="background-color: var(--toms-orange); border: none; border-radius: 8px;"
+          id="openInquiriesModalBtn"
+          data-bs-toggle="modal"
+          data-bs-target="#inquiriesModal"
+        >
+          <i class="fa-solid fa-comments"></i>
+          <span>Review Messages</span>
+          <span class="badge rounded-pill bg-danger" id="inquiryBadge" style="display: none;">0</span>
+        </button>
+      </div>
 
       <div class="row g-4 mb-5">
         <!-- Pending Payments -->
@@ -315,6 +329,51 @@
       </div>
     </div>
 
+    <!-- Customer Inquiries / Messages Modal -->
+    <div class="modal fade" id="inquiriesModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 rounded-4 overflow-hidden shadow-lg">
+          <div class="modal-header text-white" style="background-color: var(--toms-orange);">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-comments fs-5"></i>
+              <h5 class="modal-title fw-bold mb-0">Customer Inquiries & Feedback</h5>
+            </div>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+              <span class="small fw-bold text-muted" id="inquiryCountText">Loading messages...</span>
+              <div class="d-flex gap-2 align-items-center flex-wrap">
+                <button type="button" id="markAllReadBtn" class="btn btn-sm btn-success fw-bold text-nowrap shadow-sm">
+                  <i class="fa-solid fa-check-double me-1"></i> Mark All as Read
+                </button>
+                <select id="inquiryTopicFilter" class="form-select form-select-sm shadow-sm" style="min-width: 170px;">
+                  <option value="all">All Topics</option>
+                  <option value="General Inquiry">General Inquiry</option>
+                  <option value="Complaint">Complaint</option>
+                  <option value="Staff & Service Feedback">Staff & Service Feedback</option>
+                  <option value="Reservation Question">Reservation Question</option>
+                  <option value="Bulk / Barkada Order">Bulk / Barkada Order</option>
+                  <option value="Customer Feedback">Customer Feedback</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Inquiries List -->
+            <div id="inquiriesList" class="d-flex flex-column gap-3">
+              <div class="text-center py-5 text-muted">
+                <div class="spinner-border spinner-border-sm text-warning me-2" role="status"></div>
+                Loading messages...
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-white border-top justify-content-end px-4 py-3">
+            <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
       import {
         auth,
@@ -322,6 +381,7 @@
         ref,
         get,
         update,
+        remove,
         onAuthStateChanged,
         onValue,
         signOut,
@@ -678,6 +738,248 @@
           btn.innerHTML = '<i class="fa-solid fa-check-double me-2"></i> Mark as Claimed';
           btn.disabled = false;
         }
+      });
+
+      // -------------------------------------------------------------
+      // Customer Inquiries & Messages Management
+      // -------------------------------------------------------------
+      let allInquiries = [];
+      const inquiriesList = document.getElementById("inquiriesList");
+      const inquiryCountText = document.getElementById("inquiryCountText");
+      const inquiryBadge = document.getElementById("inquiryBadge");
+      const inquiryTopicFilter = document.getElementById("inquiryTopicFilter");
+      const markAllReadBtn = document.getElementById("markAllReadBtn");
+
+      function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function getTimestampMs(item) {
+        if (!item) return 0;
+        if (typeof item.timestamp === "number" && !isNaN(item.timestamp)) return item.timestamp;
+        if (typeof item.timestamp === "string") {
+          const parsed = Date.parse(item.timestamp);
+          if (!isNaN(parsed)) return parsed;
+        }
+        if (item.id && typeof item.id === "string" && item.id.startsWith("-")) {
+          const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+          let time = 0;
+          for (let i = 1; i < 9 && i < item.id.length; i++) {
+            const c = item.id.charAt(i);
+            const val = PUSH_CHARS.indexOf(c);
+            if (val !== -1) time = time * 64 + val;
+          }
+          if (time > 0) return time;
+        }
+        return 0;
+      }
+
+      function getTopicBadge(topic) {
+        const t = (topic || "").toLowerCase();
+        if (t.includes("complaint") || t.includes("issue")) {
+          return `<span class="badge bg-danger text-white"><i class="fa-solid fa-triangle-exclamation me-1"></i> Complaint</span>`;
+        } else if (t.includes("reservation")) {
+          return `<span class="badge bg-primary text-white"><i class="fa-solid fa-calendar me-1"></i> Reservation</span>`;
+        } else if (t.includes("order") || t.includes("bulk")) {
+          return `<span class="badge bg-success text-white"><i class="fa-solid fa-box me-1"></i> Bulk Order</span>`;
+        } else if (t.includes("staff") || t.includes("service")) {
+          return `<span class="badge bg-warning text-dark"><i class="fa-solid fa-user-tie me-1"></i> Staff & Service</span>`;
+        } else if (t.includes("feedback")) {
+          return `<span class="badge bg-info text-dark"><i class="fa-solid fa-comment-dots me-1"></i> Feedback</span>`;
+        }
+        return `<span class="badge bg-secondary text-white"><i class="fa-solid fa-circle-info me-1"></i> General Inquiry</span>`;
+      }
+
+      function renderInquiriesList() {
+        if (!inquiriesList) return;
+        const filter = inquiryTopicFilter ? inquiryTopicFilter.value : "all";
+
+        let filtered = allInquiries;
+        if (filter === "Complaint") {
+          filtered = allInquiries.filter(item => {
+            const t = (item.topic || "").toLowerCase();
+            return t.includes("complaint") || t.includes("issue");
+          });
+        } else if (filter !== "all") {
+          filtered = allInquiries.filter(item => item.topic === filter);
+        }
+
+        const unreadTotal = allInquiries.filter(item => !item.read).length;
+
+        if (inquiryCountText) {
+          inquiryCountText.innerHTML = `Showing <b>${filtered.length}</b> of <b>${allInquiries.length}</b> message(s) ${unreadTotal > 0 ? `<span class="badge bg-warning text-dark ms-1">${unreadTotal} New</span>` : `<span class="badge bg-success ms-1">All Read</span>`}`;
+        }
+
+        if (markAllReadBtn) {
+          markAllReadBtn.disabled = unreadTotal === 0;
+          if (unreadTotal === 0) {
+            markAllReadBtn.innerHTML = '<i class="fa-solid fa-check me-1"></i> All Read';
+            markAllReadBtn.className = "btn btn-sm btn-outline-secondary fw-bold text-nowrap shadow-sm";
+          } else {
+            markAllReadBtn.innerHTML = `<i class="fa-solid fa-check-double me-1"></i> Mark All as Read (${unreadTotal})`;
+            markAllReadBtn.className = "btn btn-sm btn-success fw-bold text-nowrap shadow-sm";
+          }
+        }
+
+        if (filtered.length === 0) {
+          inquiriesList.innerHTML = `
+            <div class="text-center py-5 text-muted bg-white rounded-3 border">
+              <i class="fa-regular fa-envelope-open fs-1 text-muted mb-2"></i>
+              <h6 class="fw-bold mb-1">No messages found</h6>
+              <small>There are currently no customer inquiries matching this filter.</small>
+            </div>
+          `;
+          return;
+        }
+
+        inquiriesList.innerHTML = filtered.map(item => {
+          const timestampMs = getTimestampMs(item);
+          const dateStr = timestampMs ? new Date(timestampMs).toLocaleString("en-US", {
+            month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true
+          }) : "Recent";
+
+          const isUnread = !item.read;
+
+          return `
+            <div class="card ${isUnread ? 'border-start border-4 border-warning' : 'border-0'} shadow-sm rounded-3 p-3 bg-white">
+              <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2 pb-2 border-bottom">
+                <div>
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <h6 class="fw-bold mb-0 text-dark">${escapeHtml(item.name || "Anonymous")}</h6>
+                    ${isUnread 
+                      ? '<span class="badge bg-warning text-dark"><i class="fa-solid fa-bell me-1"></i> Unread</span>' 
+                      : '<span class="badge bg-light text-muted border"><i class="fa-solid fa-check me-1"></i> Read</span>'}
+                  </div>
+                  <div class="small text-muted d-flex align-items-center gap-3 flex-wrap">
+                    <span><i class="fa-regular fa-envelope me-1 text-primary"></i> <a href="mailto:${escapeHtml(item.email || "")}" class="text-decoration-none text-muted">${escapeHtml(item.email || "No email")}</a></span>
+                    ${item.phone && item.phone !== "N/A" ? `<span><i class="fa-solid fa-phone me-1 text-success"></i> <a href="tel:${escapeHtml(item.phone)}" class="text-decoration-none text-muted">${escapeHtml(item.phone)}</a></span>` : ''}
+                    <span><i class="fa-regular fa-clock me-1 text-secondary"></i> ${dateStr}</span>
+                  </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  ${getTopicBadge(item.topic)}
+                  ${isUnread 
+                    ? `<button type="button" class="btn btn-outline-success btn-sm mark-read-btn fw-bold" data-id="${item.id}" title="Mark as read">
+                        <i class="fa-solid fa-check me-1"></i> Read
+                       </button>` 
+                    : `<button type="button" class="btn btn-outline-secondary btn-sm toggle-unread-btn" data-id="${item.id}" title="Mark as unread">
+                        <i class="fa-regular fa-envelope me-1"></i> Unread
+                       </button>`}
+                  <button type="button" class="btn btn-outline-danger btn-sm border-0 delete-inquiry-btn" data-id="${item.id}" title="Delete Message">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="p-3 bg-light rounded-2 text-dark small" style="white-space: pre-wrap; line-height: 1.6;">${escapeHtml(item.message || "")}</div>
+            </div>
+          `;
+        }).join("");
+
+        // Attach action listeners
+        inquiriesList.querySelectorAll(".mark-read-btn").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const inqId = btn.getAttribute("data-id");
+            if (!inqId) return;
+            btn.disabled = true;
+            try {
+              await update(ref(db, "inquiries/" + inqId), { read: true, readAt: Date.now() });
+            } catch (err) {
+              console.error("Mark read error:", err);
+              btn.disabled = false;
+            }
+          });
+        });
+
+        inquiriesList.querySelectorAll(".toggle-unread-btn").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const inqId = btn.getAttribute("data-id");
+            if (!inqId) return;
+            btn.disabled = true;
+            try {
+              await update(ref(db, "inquiries/" + inqId), { read: false });
+            } catch (err) {
+              console.error("Toggle unread error:", err);
+              btn.disabled = false;
+            }
+          });
+        });
+
+        inquiriesList.querySelectorAll(".delete-inquiry-btn").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const inqId = btn.getAttribute("data-id");
+            if (!inqId) return;
+            if (confirm("Delete this customer message from the database?")) {
+              btn.disabled = true;
+              try {
+                await remove(ref(db, "inquiries/" + inqId));
+              } catch (err) {
+                console.error("Delete inquiry error:", err);
+                alert("Failed to delete message: " + err.message);
+                btn.disabled = false;
+              }
+            }
+          });
+        });
+      }
+
+      if (inquiryTopicFilter) {
+        inquiryTopicFilter.addEventListener("change", renderInquiriesList);
+      }
+
+      if (markAllReadBtn) {
+        markAllReadBtn.addEventListener("click", async () => {
+          const unreadItems = allInquiries.filter(item => !item.read);
+          if (unreadItems.length === 0) return;
+          markAllReadBtn.disabled = true;
+          markAllReadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Updating...';
+          try {
+            const updates = {};
+            unreadItems.forEach(item => {
+              updates[`inquiries/${item.id}/read`] = true;
+              updates[`inquiries/${item.id}/readAt`] = Date.now();
+            });
+            await update(ref(db), updates);
+          } catch (err) {
+            console.error("Mark all read error:", err);
+            alert("Failed to mark all as read: " + err.message);
+            markAllReadBtn.disabled = false;
+          }
+        });
+      }
+
+      // Realtime listener for customer inquiries
+      onValue(ref(db, "inquiries"), (snapshot) => {
+        allInquiries = [];
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          Object.keys(data).forEach(key => {
+            allInquiries.push({
+              id: key,
+              ...data[key]
+            });
+          });
+          // Sort newest messages on top, oldest on bottom
+          allInquiries.sort((a, b) => getTimestampMs(b) - getTimestampMs(a));
+        }
+
+        // Unread badge logic: only display if there are unread messages
+        const unreadCount = allInquiries.filter(item => !item.read).length;
+        if (inquiryBadge) {
+          if (unreadCount > 0) {
+            inquiryBadge.textContent = unreadCount;
+            inquiryBadge.style.display = "inline-block";
+          } else {
+            inquiryBadge.style.display = "none";
+          }
+        }
+
+        renderInquiriesList();
       });
 
       // Logout

@@ -89,15 +89,18 @@
             background-color: var(--toms-orange);
             color: white;
             border-radius: 50px;
-            padding: 8px 25px;
+            padding: 10px 28px;
+            font-size: 1rem;
+            line-height: 1.5;
+            display: inline-block;
             font-weight: bold;
             border: none;
-            transition: transform 0.2s;
+            transition: transform 0.2s, background-color 0.2s;
         }
         .btn-orange:hover {
             background-color: #d1660a;
             color: white;
-            transform: scale(1.05);
+            transform: translateY(-2px);
         }
 
         /* HERO SECTION (Video Background) */
@@ -190,7 +193,7 @@
             </div>
 
             <div id="authSection" class="d-none d-lg-block">
-                <a href="login.html" class="btn-orange">Login</a>
+                <a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>
             </div>
             <script>if (window.renderPreloadedNavbar) window.renderPreloadedNavbar("authSection", "authSectionMobile");</script>
         </div>
@@ -353,11 +356,12 @@
         }
 
         function renderGuestNav() {
-            if (authSection) {
-                authSection.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+            const guestHtml = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+            if (authSection && authSection.innerHTML !== guestHtml) {
+                authSection.innerHTML = guestHtml;
             }
-            if (authSectionMobile) {
-                authSectionMobile.innerHTML = `<a href="login.html" class="btn-orange text-decoration-none">Login / Sign Up</a>`;
+            if (authSectionMobile && authSectionMobile.innerHTML !== guestHtml) {
+                authSectionMobile.innerHTML = guestHtml;
             }
         }
 
