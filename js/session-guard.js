@@ -13,16 +13,24 @@
         noShiftStyle.id = "toms-no-layout-shift";
         noShiftStyle.textContent = `
             html {
+                overflow-y: scroll !important;
                 scrollbar-gutter: stable;
             }
-            body.modal-open,
+            body.modal-open {
+                overflow: hidden !important;
+                padding-right: 0px !important;
+            }
             body[style*="padding-right"] {
                 padding-right: 0px !important;
             }
             .modal-open .fixed-top,
             .modal-open .sticky-top,
-            .modal-open .navbar {
+            .modal-open .navbar,
+            .fixed-top,
+            .sticky-top,
+            .navbar {
                 padding-right: 0px !important;
+                margin-right: 0px !important;
             }
         `;
         if (document.head) {

@@ -145,6 +145,28 @@
             color: var(--toms-orange);
             margin-bottom: 15px;
         }
+
+        /* Prevent modal open layout shift */
+        html {
+            overflow-y: scroll !important;
+            scrollbar-gutter: stable;
+        }
+        body.modal-open {
+            overflow: hidden !important;
+            padding-right: 0px !important;
+        }
+        body[style*="padding-right"] {
+            padding-right: 0px !important;
+        }
+        .modal-open .fixed-top,
+        .modal-open .sticky-top,
+        .modal-open .navbar,
+        .fixed-top,
+        .sticky-top,
+        .navbar {
+            padding-right: 0px !important;
+            margin-right: 0px !important;
+        }
     </style>
 </head>
 <body>
@@ -180,9 +202,9 @@
             <div class="collapse navbar-collapse justify-content-center" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item"><a class="nav-link active" href="index.html">Home</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="checkMenuAuth()">Menu</a></li>
+                    <li class="nav-item"><a class="nav-link" href="javascript:void(0)" onclick="checkMenuAuth(event)">Menu</a></li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#" onclick="checkReservationAuth()">Reservation</a>
+                        <a class="nav-link" href="javascript:void(0)" onclick="checkReservationAuth(event)">Reservation</a>
                     </li>
                     <li class="nav-item"><a class="nav-link" href="about.html">About</a></li>
                     <li class="nav-item"><a class="nav-link" href="contact.html">Contact</a></li>
@@ -209,8 +231,8 @@
             <h1 class="display-2 fw-bold mb-3">UNLIMITED HAPPINESS</h1>
             <p class="lead mb-4 fs-4">Experience the best wings in town. Crispy, spicy, and refillable.</p>
             <div class="d-flex justify-content-center gap-3">
-                <a onclick="checkMenuAuth()" class="btn btn-orange btn-lg px-4">View Menu</a>
-                <button onclick="checkReservationAuth()" class="btn btn-outline-light btn-lg px-4 rounded-pill fw-bold">Book a Table</button>
+                <a href="javascript:void(0)" onclick="checkMenuAuth(event)" class="btn btn-orange btn-lg px-4">View Menu</a>
+                <button type="button" onclick="checkReservationAuth(event)" class="btn btn-outline-light btn-lg px-4 rounded-pill fw-bold">Book a Table</button>
             </div>
         </div>
     </header>
@@ -412,21 +434,41 @@
         });
 
         // check if user is logged in or not and redirect accordingly
-        window.checkReservationAuth = function() {
+        window.checkReservationAuth = function(e) {
+            if (e) {
+                if (typeof e.preventDefault === "function") e.preventDefault();
+                if (typeof e.stopPropagation === "function") e.stopPropagation();
+            }
             if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
                 window.location.href = "reservation.html";
             } else {
-                authModal.show();
+                if (typeof authModal !== "undefined" && authModal) {
+                    authModal.show();
+                } else {
+                    const el = document.getElementById("authModal");
+                    if (el && window.bootstrap) new bootstrap.Modal(el).show();
+                }
             }
-        }
+            return false;
+        };
 
-        window.checkMenuAuth = function() {
+        window.checkMenuAuth = function(e) {
+            if (e) {
+                if (typeof e.preventDefault === "function") e.preventDefault();
+                if (typeof e.stopPropagation === "function") e.stopPropagation();
+            }
             if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
                 window.location.href = "menu.html";
             } else {
-                authModal.show();
+                if (typeof authModal !== "undefined" && authModal) {
+                    authModal.show();
+                } else {
+                    const el = document.getElementById("authModal");
+                    if (el && window.bootstrap) new bootstrap.Modal(el).show();
+                }
             }
-        }
+            return false;
+        };
     </script>
 </body>
 </html>

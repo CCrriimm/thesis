@@ -106,18 +106,62 @@
             transform: translateY(-2px);
         }
 
+        /* CONTACT HERO (with ChickenBG.mp4) */
         .contact-hero {
-            background: linear-gradient(135deg, #212529 0%, #343a40 100%);
+            position: relative;
+            background: #111;
             color: white;
-            padding: 70px 0 50px;
-            text-align: center;
+            padding: 90px 0 70px;
+            overflow: hidden;
             width: 100%;
             max-width: 100%;
+            text-align: center;
+        }
+        .contact-hero .hero-bg-video {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            opacity: 0.5;
+        }
+        .contact-hero .hero-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(180deg, rgba(15, 15, 15, 0.72) 0%, rgba(20, 20, 20, 0.85) 100%);
+            z-index: 1;
+        }
+        .contact-hero .hero-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Prevent modal open layout shift */
+        html {
+            overflow-y: scroll !important;
+            scrollbar-gutter: stable;
+        }
+        body.modal-open {
+            overflow: hidden !important;
+            padding-right: 0px !important;
+        }
+        body[style*="padding-right"] {
+            padding-right: 0px !important;
+        }
+        .modal-open .fixed-top,
+        .modal-open .sticky-top,
+        .modal-open .navbar,
+        .fixed-top,
+        .sticky-top,
+        .navbar {
+            padding-right: 0px !important;
+            margin-right: 0px !important;
         }
 
         @media (max-width: 576px) {
             .contact-hero {
-                padding: 50px 0 35px;
+                padding: 60px 0 40px;
             }
             .contact-hero h1 {
                 font-size: 2.2rem;
@@ -222,8 +266,8 @@
           <div class="collapse navbar-collapse justify-content-center" id="navbarNav">
               <ul class="navbar-nav">
                   <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
-                  <li class="nav-item"><a class="nav-link" href="#" onclick="checkMenuAuth()">Menu</a></li>
-                  <li class="nav-item"><a class="nav-link" href="#" onclick="checkReservationAuth()">Reservation</a></li>
+                  <li class="nav-item"><a class="nav-link" href="javascript:void(0)" onclick="checkMenuAuth(event)">Menu</a></li>
+                  <li class="nav-item"><a class="nav-link" href="javascript:void(0)" onclick="checkReservationAuth(event)">Reservation</a></li>
                   <li class="nav-item"><a class="nav-link" href="about.html">About</a></li>
                   <li class="nav-item"><a class="nav-link active" href="contact.html">Contact</a></li>
               </ul>
@@ -240,8 +284,12 @@
   </nav>
 
   <!-- Hero Header -->
-  <header class="contact-hero">
-      <div class="container">
+  <header class="contact-hero text-center">
+      <video autoplay muted loop playsinline class="hero-bg-video">
+          <source src="Media/ChickenBG.mp4" type="video/mp4">
+      </video>
+      <div class="hero-overlay"></div>
+      <div class="hero-content container">
           <span class="badge px-3 py-2 rounded-pill mb-3" style="background-color: rgba(245, 125, 16, 0.2); color: #ffa94d; font-weight: bold; letter-spacing: 1px;">
               <i class="fa-solid fa-comments me-1"></i> WE'D LOVE TO HEAR FROM YOU
           </span>
@@ -599,7 +647,11 @@
           }
       });
 
-      window.checkReservationAuth = function() {
+      window.checkReservationAuth = function(e) {
+          if (e) {
+              if (typeof e.preventDefault === 'function') e.preventDefault();
+              if (typeof e.stopPropagation === 'function') e.stopPropagation();
+          }
           if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
               window.location.href = "reservation.html";
           } else {
@@ -607,7 +659,11 @@
           }
       }
 
-      window.checkMenuAuth = function() {
+      window.checkMenuAuth = function(e) {
+          if (e) {
+              if (typeof e.preventDefault === 'function') e.preventDefault();
+              if (typeof e.stopPropagation === 'function') e.stopPropagation();
+          }
           if (currentUser || auth.currentUser || sessionStorage.getItem("toms_user_logged_in") === "true") {
               window.location.href = "menu.html";
           } else {
