@@ -235,7 +235,6 @@
             </div>
             <div>
               <h5 class="fw-bold mb-0 text-dark">Table Refills to Serve</h5>
-              <small class="text-muted">Cooked by kitchen, ready for floor staff to deliver to tables</small>
             </div>
           </div>
           <span class="badge rounded-pill px-3 py-2 fs-6 pulse-badge" id="refillCountBadge" style="background-color: #ff9800; color: #fff;">
@@ -261,7 +260,6 @@
             </div>
             <div>
               <h5 class="fw-bold mb-0 text-dark">Ready for Pickup</h5>
-              <small class="text-muted">Online orders cooked by chef, waiting for customer pickup</small>
             </div>
           </div>
           <span class="badge bg-success rounded-pill px-3 py-2 fs-6 pulse-badge" id="readyCountBadge">
@@ -602,8 +600,7 @@
           container.innerHTML = `
             <div class="col-12 text-center text-muted py-4">
               <i class="fa-solid fa-circle-check fa-3x text-success mb-2 opacity-75"></i>
-              <h6 class="fw-bold mb-1 text-dark">No Table Refills Waiting to Serve</h6>
-              <p class="small text-muted mb-0">When the kitchen chef presses "Serve to Table", refill requests will appear here for staff to confirm delivery.</p>
+              <h6 class="fw-bold mb-0 text-dark">No Table Refills Waiting to Serve</h6>
             </div>
           `;
           return;
@@ -707,8 +704,7 @@
           container.innerHTML = `
             <div class="col-12 text-center text-muted py-5">
               <i class="fa-solid fa-mug-hot fa-3x mb-3 text-secondary opacity-50"></i>
-              <h5 class="fw-bold mb-1">No Orders Waiting for Pickup</h5>
-              <p class="small text-muted mb-0">When the kitchen chef clicks "Ready for Pickup", orders will instantly appear here for staff checkout.</p>
+              <h5 class="fw-bold mb-0">No Orders Waiting for Pickup</h5>
             </div>
           `;
           return;

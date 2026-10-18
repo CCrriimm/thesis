@@ -175,9 +175,6 @@
                 <i class="fa-solid fa-mobile-screen-button me-1"></i> Phone SMS
               </label>
             </div>
-            <small class="text-muted d-block mt-1" id="methodHint" style="font-size: 0.75rem;">
-              <i class="fa-solid fa-circle-info text-primary me-1"></i> We'll send a fast verification link to your email.
-            </small>
           </div>
 
           <button
@@ -436,16 +433,13 @@
 
       const methodEmailRadio = document.getElementById("methodEmail");
       const methodPhoneRadio = document.getElementById("methodPhone");
-      const methodHint = document.getElementById("methodHint");
       const signupBtn = document.getElementById("signupBtn");
 
       function updateMethodUI() {
         if (methodPhoneRadio && methodPhoneRadio.checked) {
           signupBtn.textContent = "SEND SMS & REGISTER";
-          methodHint.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i> SMS verification is subject to carrier limits (10/day).';
         } else {
           signupBtn.textContent = "VERIFY & REGISTER";
-          methodHint.innerHTML = '<i class="fa-solid fa-circle-info text-primary me-1"></i> We\'ll send a fast verification link to your email.';
         }
       }
       if (methodEmailRadio) methodEmailRadio.addEventListener("change", updateMethodUI);

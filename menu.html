@@ -220,17 +220,22 @@
                 </small>
               </div>
               <div class="payment-box mb-4 text-center">
-                <h6 class="fw-bold text-dark mb-1">Pay via GCash / PayMaya</h6>
-                <p class="mb-2 small">Send total amount to: <b>0912 345 6789</b></p>
-                <div class="qr-placeholder mx-auto shadow-sm">
+                <h6 class="fw-bold text-dark mb-1">Pay via GCash</h6>
+                <p class="mb-2 small">Send to: <b>0912 345 6789</b></p>
+                <div class="qr-placeholder mx-auto shadow-sm" style="cursor: pointer;" title="Tap to save QR Code" onclick="downloadQRCode(event)">
                   <img src="Media/Payment_QR.png" alt="Payment QR Code" class="qr-img" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\'fa-solid fa-qrcode fa-3x text-muted opacity-50\'></i>';" />
                 </div>
                 <small class="text-muted d-block mt-1">Scan or tap to save QR for payment</small>
+                <div class="mt-2">
+                  <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3 py-1 save-qr-btn" onclick="downloadQRCode(event)">
+                    <i class="fa-solid fa-download me-1"></i> Save QR Code
+                  </button>
+                </div>
               </div>
               <div class="mb-4">
                 <label class="form-label fw-bold small">Upload Payment Receipt</label>
                 <input type="file" id="orderReceipt" class="form-control" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp" required />
-                <small class="text-muted d-block mt-1"><i class="fa-solid fa-circle-info me-1"></i> Max 20MB. PNG, JPG, or WEBP only (ZIP/PDF not accepted).</small>
+                <small class="text-muted d-block mt-1"><i class="fa-solid fa-circle-info me-1"></i> Max 20MB. PNG, JPG, or WEBP only.</small>
               </div>
 
               <!-- Cancellation & Refund Policy Notice -->
@@ -891,6 +896,30 @@
           btn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Confirm Order'; btn.disabled = false;
         }
       });
+
+      window.downloadQRCode = function(e) {
+        if (e) {
+          if (typeof e.preventDefault === "function") e.preventDefault();
+          if (typeof e.stopPropagation === "function") e.stopPropagation();
+        }
+        const link = document.createElement("a");
+        link.href = "Media/Payment_QR.png";
+        link.download = "TomsChicken-GCash-QR.png";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        const btns = document.querySelectorAll(".save-qr-btn");
+        btns.forEach(btn => {
+          const originalText = btn.innerHTML;
+          btn.innerHTML = '<i class="fa-solid fa-check text-success me-1"></i> QR Saved!';
+          btn.classList.add("border-success", "text-success");
+          setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.classList.remove("border-success", "text-success");
+          }, 2500);
+        });
+      };
     </script>
   </body>
 </html>
