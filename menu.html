@@ -216,7 +216,7 @@
                 <label class="form-label fw-bold small">Pickup Time</label>
                 <input type="time" id="pickupTime" class="form-control" min="11:00" max="22:00" required />
                 <small class="text-muted d-block mt-1" style="font-size: 0.74rem;">
-                  <i class="fa-regular fa-clock me-1 text-primary"></i> Operating hours: <b>11:00 AM – 10:00 PM</b>
+                  <i class="fa-regular fa-clock me-1 text-primary"></i> Operating hours: <b>11:00 AM – 10:00 PM</b> (Minimum 30-min preparation time)
                 </small>
               </div>
               <div class="payment-box mb-4 text-center">
@@ -809,6 +809,43 @@
         });
       }
 
+      function syncPickupTimeMin() {
+        const input = document.getElementById("pickupTime");
+        if (!input) return;
+        const now = new Date();
+        const curMins = now.getHours() * 60 + now.getMinutes();
+        const OPEN_MINS = 11 * 60; // 11:00 AM (660)
+        const CLOSE_MINS = 22 * 60; // 10:00 PM (1320)
+        const LEAD_MINS = 30; // At least 30 minutes prep time
+
+        // If currently past 9:30 PM (21:30), no more orders can be prepared before 10 PM close
+        if (curMins >= (CLOSE_MINS - LEAD_MINS)) {
+          input.disabled = true;
+          input.value = "";
+          showCheckoutError("Online pickup orders are closed for today. Orders require at least 30 minutes before our 10:00 PM closing.");
+          return;
+        }
+
+        input.disabled = false;
+        const earliestMins = Math.max(OPEN_MINS, curMins + LEAD_MINS);
+        const h = Math.floor(earliestMins / 60);
+        const m = earliestMins % 60;
+        const minStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        input.min = minStr;
+        input.max = "22:00";
+        if (!input.value || input.value < minStr) {
+          input.value = minStr;
+        }
+      }
+
+      const cartModalEl = document.getElementById("cartModal");
+      if (cartModalEl) {
+        cartModalEl.addEventListener("show.bs.modal", () => {
+          clearCheckoutError();
+          syncPickupTimeMin();
+        });
+      }
+
       // Checkout Logic
       document.getElementById("checkoutForm").addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -824,9 +861,38 @@
           return;
         }
 
-        // Validate pickup time within operating hours (11:00 AM to 10:00 PM)
-        if (rawPickupTime < "11:00" || rawPickupTime > "22:00") {
+        const now = new Date();
+        const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+        const OPEN_MINUTES = 11 * 60;  // 11:00 AM
+        const CLOSE_MINUTES = 22 * 60; // 10:00 PM
+        const LEAD_MINUTES = 30;       // 30 minutes minimum
+
+        // 1. Check closing cutoff
+        if (currentTotalMinutes >= (CLOSE_MINUTES - LEAD_MINUTES)) {
+          showCheckoutError("Online pickup orders are closed for today. Orders must be placed at least 30 minutes before 10:00 PM.");
+          return;
+        }
+
+        const [pfxH, pfxM] = rawPickupTime.split(":").map(Number);
+        const selectedTotalMinutes = pfxH * 60 + pfxM;
+
+        // 2. Validate operating hours window
+        if (selectedTotalMinutes < OPEN_MINUTES || selectedTotalMinutes > CLOSE_MINUTES) {
           showCheckoutError("Pickup time must be between 11:00 AM and 10:00 PM (store operating hours).");
+          return;
+        }
+
+        // 3. Validate at least 30 minutes from current time
+        const minAllowedMinutes = Math.max(OPEN_MINUTES, currentTotalMinutes + LEAD_MINUTES);
+        if (selectedTotalMinutes < minAllowedMinutes) {
+          if (currentTotalMinutes < OPEN_MINUTES) {
+            showCheckoutError("Pickup time must be at or after store opening time (11:00 AM).");
+          } else {
+            const minH = Math.floor(minAllowedMinutes / 60);
+            const minM = minAllowedMinutes % 60;
+            const minFormatted = formatTo12Hour(`${String(minH).padStart(2, "0")}:${String(minM).padStart(2, "0")}`);
+            showCheckoutError(`Pickup time must be at least 30 minutes from now for kitchen preparation (earliest available: ${minFormatted}).`);
+          }
           return;
         }
 

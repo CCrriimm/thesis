@@ -1038,16 +1038,38 @@
         let d = new Date(dateStr);
         document.getElementById("displaySelectedDate").innerText = d.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
+        // Same-day past slot check
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const isToday = dateStr === todayStr;
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentDecimal = currentHour + currentMinute / 60;
+
+        // Slot cutoff thresholds
+        const slotCutoffs = {
+          "11:00 AM - 2:00 PM": 13.0, // After 1:00 PM, cannot book 11am-2pm slot
+          "2:00 PM - 5:00 PM": 16.0,  // After 4:00 PM, cannot book 2pm-5pm slot
+          "5:00 PM - 8:00 PM": 19.0,  // After 7:00 PM, cannot book 5pm-8pm slot
+          "8:00 PM - 10:00 PM": 21.0  // After 9:00 PM, cannot book 8pm-10pm slot
+        };
+
         let dayData = reservationData[dateStr] || {};
         const select = document.getElementById("resTime");
         Array.from(select.options).forEach((opt) => {
           if (opt.value === "") return;
           let slotData = dayData[opt.value] || {};
           let occupiedTables = slotData.tables ? Object.keys(slotData.tables).length : 0;
-          if (occupiedTables >= TOTAL_TABLES) {
-            opt.disabled = true; opt.text = opt.value + " (FULL)";
+
+          if (isToday && slotCutoffs[opt.value] !== undefined && currentDecimal >= slotCutoffs[opt.value]) {
+            opt.disabled = true;
+            opt.text = opt.value + " (PASSED)";
+          } else if (occupiedTables >= TOTAL_TABLES) {
+            opt.disabled = true;
+            opt.text = opt.value + " (FULL)";
           } else {
-            opt.disabled = false; opt.text = opt.value + ` (${TOTAL_TABLES - occupiedTables} left)`;
+            opt.disabled = false;
+            opt.text = opt.value + ` (${TOTAL_TABLES - occupiedTables} left)`;
           }
         });
         select.value = "";
@@ -1192,6 +1214,12 @@
         const name = (item.name || "").toLowerCase();
         const cat = (item.category || "").toLowerCase();
 
+        if (name.includes("tm1") || name.includes("tom original")) return "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80";
+        if (name.includes("tm2")) return "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=800&auto=format&fit=crop&q=80";
+        if (name.includes("tm3")) return "https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=800&auto=format&fit=crop&q=80";
+        if (name.includes("tm4")) return "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=800&auto=format&fit=crop&q=80";
+        if (name.includes("tm5")) return "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80";
+
         if (name.includes("caesar")) return "https://images.unsplash.com/photo-1546793665-c74683f339c1?w=800&auto=format&fit=crop&q=80";
         if (name.includes("kani")) return "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=800&auto=format&fit=crop&q=80";
         if (name.includes("tlc burger")) return "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=80";
@@ -1242,49 +1270,146 @@
         updateTotalDisplay();
       });
 
+      const WING_FLAVORS = [
+        "Teriyaki", "Smoked BBQ", "Garlic Parmesan", "Garlic Butter",
+        "Hot Orange Soda", "Mango Habanero", "Spicy Korean", "Honey Mustard",
+        "Cheesy", "Lemon Glazed", "Salted Egg", "Buffalo", "Nuclear Bomb", "Lechon Paksiw"
+      ];
+
+      const CANONICAL_UNLI_PROMOS = {
+        u1: {
+          name: "TM1: Unli Tom Original",
+          desc: "Rice + Gravy",
+          price: 239,
+          options: [], // Strictly no flavors for TM1 (original fried chicken only)
+          optionCount: 0
+        },
+        u2: {
+          name: "TM2: Unli Wings (All Flavors)",
+          desc: "Rice + crispy isaw + 1 serving of dip",
+          price: 319,
+          options: WING_FLAVORS,
+          optionCount: 1
+        },
+        u3: {
+          name: "TM3: Unli Wings",
+          desc: "Rice + crispy isaw + chicken sisig + fries + dip + iced tea",
+          price: 369,
+          options: WING_FLAVORS,
+          optionCount: 1
+        },
+        u4: {
+          name: "TM4: Unli Wings (Best Seller)",
+          desc: "Rice + crispy isaw + lumpia + chicken sisig + fries + pasta + dip + iced tea",
+          price: 379,
+          options: WING_FLAVORS,
+          optionCount: 1
+        },
+        u5: {
+          name: "TM5: Unli Wings",
+          desc: "Rice + crispy isaw + lumpia + chicken sisig + fries + pasta + nachos + dip + iced tea",
+          price: 399,
+          options: WING_FLAVORS,
+          optionCount: 1
+        }
+      };
+
+      function renderFlavorSelectors(uniqueID, qty) {
+        const wrap = document.getElementById(`flavors_wrap_${uniqueID}`);
+        if (!wrap) return;
+
+        const item = currentMenuData[uniqueID];
+        if (!item || !item.options || item.options.length === 0 || qty <= 0) {
+          wrap.innerHTML = "";
+          return;
+        }
+
+        const perUnitCount = item.optionCount || 1;
+        const totalSets = qty;
+
+        const existingValues = [];
+        const prevSelects = wrap.querySelectorAll("select");
+        prevSelects.forEach(s => existingValues.push(s.value));
+
+        let html = `<div class="d-flex flex-column gap-2 p-2 bg-light rounded w-100 border mt-2">`;
+        html += `<div class="small fw-bold text-dark"><i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select Flavor(s) (${qty} order${qty > 1 ? "s" : ""}):</div>`;
+
+        let selectIdx = 0;
+        for (let u = 0; u < totalSets; u++) {
+          const orderNum = u + 1;
+          if (perUnitCount === 1) {
+            const prevVal = existingValues[selectIdx] || item.options[0];
+            html += `
+              <div class="d-flex align-items-center gap-2">
+                <small class="fw-bold text-muted text-nowrap" style="min-width: 65px; font-size: 0.78rem;">#${orderNum}:</small>
+                <select class="form-select form-select-sm fw-bold flavor-select-input" style="font-size: 0.8rem;" id="flavor_${uniqueID}_${selectIdx}">
+                  ${item.options.map(opt => `<option value="${opt}" ${opt === prevVal ? "selected" : ""}>${opt}</option>`).join("")}
+                </select>
+              </div>
+            `;
+            selectIdx++;
+          } else {
+            html += `<div class="p-2 rounded bg-white border">`;
+            html += `<small class="fw-bold text-dark d-block mb-1" style="font-size: 0.76rem;">Order #${orderNum} (${perUnitCount} Flavors):</small>`;
+            html += `<div class="d-flex flex-column gap-1">`;
+            for (let f = 0; f < perUnitCount; f++) {
+              const prevVal = existingValues[selectIdx] || item.options[Math.min(f, item.options.length - 1)];
+              html += `
+                <div class="d-flex align-items-center gap-2">
+                  <small class="text-muted" style="min-width: 55px; font-size: 0.75rem;">Flavor ${f + 1}:</small>
+                  <select class="form-select form-select-sm fw-bold flavor-select-input" style="font-size: 0.8rem;" id="flavor_${uniqueID}_${selectIdx}">
+                    ${item.options.map(opt => `<option value="${opt}" ${opt === prevVal ? "selected" : ""}>${opt}</option>`).join("")}
+                  </select>
+                </div>
+              `;
+              selectIdx++;
+            }
+            html += `</div></div>`;
+          }
+        }
+        html += `</div>`;
+        wrap.innerHTML = html;
+      }
+
       function renderCombinedAdvanceMenu() {
         const container = document.getElementById("menuContainer");
         container.innerHTML = "";
         currentMenuData = {};
 
-        // 1. Render Unli Promos & Barkada Sets (from advanceMenu)
-        if (advanceMenuPromos) {
-          for (let catKey in advanceMenuPromos) {
-            let cat = advanceMenuPromos[catKey];
-            let html = `<div class="p-2 bg-white border-bottom"><h6 class="fw-bold mb-0" style="color: var(--toms-orange);"><i class="fa-solid ${cat.icon || 'fa-fire'} me-2"></i> ${cat.title}</h6></div><div class="advance-menu-grid">`;
+        // 1. Render Unli Wings Promos (Strictly Canonical 5 Promos: TM1 - TM5, NO duplicates)
+        let unliHtml = `<div class="p-2 bg-white border-bottom"><h6 class="fw-bold mb-0" style="color: var(--toms-orange);"><i class="fa-solid fa-fire me-2"></i> Unli Wings Promos</h6></div><div class="advance-menu-grid">`;
 
-            for (let itemKey in cat.items) {
-              let item = cat.items[itemKey];
-              let uniqueID = `adv_${catKey}_${itemKey}`;
-              currentMenuData[uniqueID] = item;
-              let imgSrc = getItemImage(item);
-              let desc = (item.desc || "").replace(/"/g, '&quot;');
-              let safeName = (item.name || "").replace(/"/g, '&quot;');
-              let currentQty = advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0;
+        for (let itemKey in CANONICAL_UNLI_PROMOS) {
+          let item = CANONICAL_UNLI_PROMOS[itemKey];
+          let uniqueID = `adv_cat1_unli_${itemKey}`;
+          currentMenuData[uniqueID] = item;
+          let imgSrc = getItemImage(item);
+          let desc = (item.desc || "").replace(/"/g, '&quot;');
+          let safeName = (item.name || "").replace(/"/g, '&quot;');
+          let currentQty = advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0;
 
-              html += `
-                <div class="advance-item-card">
-                  <div class="d-flex flex-row align-items-center gap-3">
-                    <div class="menu-card-img-wrap shadow-sm" onclick="openFoodPreview('${safeName}', '${imgSrc}', '${item.price}', '${desc}')" title="Click to view full image">
-                      <img src="${imgSrc}" alt="${safeName}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\'fa-solid fa-utensils text-warning p-3\\'></i>';" />
-                    </div>
-                    <div style="flex-grow: 1;">
-                      <h6 class="fw-bold mb-1">${item.name}</h6>
-                      <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">${item.desc || ""}</small>
-                      <span class="fw-bold text-success">₱${item.price}</span>
-                    </div>
-                    <div class="d-flex align-items-center">
-                      <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
-                      <input type="number" min="0" max="30" class="qty-input mx-1" id="qty_${uniqueID}" value="${currentQty}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
-                      <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
-                    </div>
-                  </div>
-                </div>`;
-            }
-            html += `</div>`;
-            container.innerHTML += html;
-          }
+          unliHtml += `
+            <div class="advance-item-card">
+              <div class="d-flex flex-row align-items-center gap-3 w-100">
+                <div class="menu-card-img-wrap shadow-sm" onclick="openFoodPreview('${safeName}', '${imgSrc}', '${item.price}', '${desc}')" title="Click to view full image">
+                  <img src="${imgSrc}" alt="${safeName}" onerror="this.onerror=null; this.parentElement.innerHTML='<i class=\\'fa-solid fa-utensils text-warning p-3\\'></i>';" />
+                </div>
+                <div style="flex-grow: 1;">
+                  <h6 class="fw-bold mb-1">${item.name}</h6>
+                  <small class="text-muted d-block mb-1" style="font-size: 0.75rem;">${item.desc || ""}</small>
+                  <span class="fw-bold text-success">₱${item.price}</span>
+                </div>
+                <div class="d-flex align-items-center">
+                  <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', -1)">-</button>
+                  <input type="number" min="0" max="30" class="qty-input mx-1" id="qty_${uniqueID}" value="${currentQty}" oninput="setCartQty('${uniqueID}', this.value)" onchange="setCartQty('${uniqueID}', this.value)" />
+                  <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
+                </div>
+              </div>
+              <div id="flavors_wrap_${uniqueID}" class="w-100"></div>
+            </div>`;
         }
+        unliHtml += `</div>`;
+        container.innerHTML += unliHtml;
 
         // 2. Render Full Restaurant Menu (Salads, Burgers, Pasta, Rice Meals, Wings, etc.)
         if (fullRestaurantMenu) {
@@ -1311,21 +1436,6 @@
                 let safeName = (item.name || "").replace(/"/g, '&quot;');
                 let currentQty = advanceCart[uniqueID] ? advanceCart[uniqueID].qty : 0;
 
-                let dropdownsHTML = "";
-                if (item.options && item.options.length > 0) {
-                  let count = item.optionCount || 1;
-                  dropdownsHTML += `<div class="d-flex flex-wrap gap-2 mt-2 p-2 bg-light rounded w-100 border">`;
-                  dropdownsHTML += `<div class="w-100 small fw-bold text-muted mb-1">Select ${count} Flavor(s):</div>`;
-                  for (let i = 0; i < count; i++) {
-                    dropdownsHTML += `<select class="form-select form-select-sm" style="font-size: 0.8rem;" id="flavor_${uniqueID}_${i}">`;
-                    item.options.forEach((opt) => {
-                      dropdownsHTML += `<option value="${opt}">${opt}</option>`;
-                    });
-                    dropdownsHTML += `</select>`;
-                  }
-                  dropdownsHTML += `</div>`;
-                }
-
                 html += `
                   <div class="advance-item-card">
                     <div class="d-flex flex-row align-items-center gap-3 w-100">
@@ -1343,7 +1453,7 @@
                         <button type="button" class="qty-btn" onclick="updateCart('${uniqueID}', 1)">+</button>
                       </div>
                     </div>
-                    ${dropdownsHTML}
+                    <div id="flavors_wrap_${uniqueID}" class="w-100"></div>
                   </div>`;
               }
               html += `</div>`;
@@ -1352,11 +1462,16 @@
           });
         }
 
-        if (!advanceMenuPromos && !fullRestaurantMenu) {
-          container.innerHTML = '<p class="text-center text-muted py-3">Loading menu...</p>';
+        // Initialize flavor selectors for any item already in cart
+        for (let uId in currentMenuData) {
+          const qty = advanceCart[uId] ? advanceCart[uId].qty : 0;
+          if (qty > 0) renderFlavorSelectors(uId, qty);
+        }
+
+        if (!fullRestaurantMenu) {
+          container.innerHTML += '<p class="text-center text-muted py-3">Loading menu...</p>';
         }
       }
-
 
       window.updateCart = function (id, change) {
         if (!advanceCart[id]) advanceCart[id] = { ...currentMenuData[id], qty: 0 };
@@ -1364,6 +1479,7 @@
         advanceCart[id].qty = newQty;
         const qtyEl = document.getElementById(`qty_${id}`);
         if (qtyEl) qtyEl.value = newQty;
+        renderFlavorSelectors(id, newQty);
         if (newQty === 0) delete advanceCart[id];
         updateTotalDisplay();
       };
@@ -1377,6 +1493,7 @@
         advanceCart[id].qty = num;
         const qtyEl = document.getElementById(`qty_${id}`);
         if (qtyEl && qtyEl.value != num) qtyEl.value = num;
+        renderFlavorSelectors(id, num);
         if (num === 0) delete advanceCart[id];
         updateTotalDisplay();
       };
@@ -1418,13 +1535,25 @@
             let item = advanceCart[id];
             let optStr = "";
             if (item.options && item.options.length > 0) {
-              let count = item.optionCount || 1;
+              let perUnit = item.optionCount || 1;
+              let totalFlavors = perUnit * item.qty;
               let chosen = [];
-              for (let i = 0; i < count; i++) {
+              for (let i = 0; i < totalFlavors; i++) {
                 let sel = document.getElementById(`flavor_${id}_${i}`);
-                if (sel) chosen.push(sel.value);
+                if (sel && sel.value) chosen.push(sel.value);
               }
-              if (chosen.length > 0) optStr = ` (${chosen.join(", ")})`;
+              if (chosen.length > 0) {
+                if (perUnit === 1) {
+                  optStr = ` (${chosen.join(", ")})`;
+                } else {
+                  let sets = [];
+                  for (let u = 0; u < item.qty; u++) {
+                    let setFlavors = chosen.slice(u * perUnit, (u + 1) * perUnit);
+                    sets.push(`Set #${u + 1}: ${setFlavors.join(" + ")}`);
+                  }
+                  optStr = ` (${sets.join("; ")})`;
+                }
+              }
             }
             itemsList.push(`${item.qty}x ${item.name}${optStr}`);
           }

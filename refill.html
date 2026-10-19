@@ -255,12 +255,18 @@
                 const promoData = snap.val();
                 document.getElementById('promoDisplayBadge').innerText = `${myPromoType} (${myPaxCount} Pax)`;
 
+                // TM1 is strictly Unli Tom Original - unflavored fried chicken only (no glazed/dry-rub flavors)
+                if (myPromoType === 'TM1') {
+                    promoData.mains = ["Tom's Original Chicken (No Flavor)"];
+                }
+
                 // Dynamic Sides Limit (1 limit per 2 pax. If 1 pax, minimum is still 1)
                 let sidesLimit = Math.max(1, Math.floor(myPaxCount / 2));
 
                 // 1. Mains (Category Limit = Pax Count)
                 if (promoData.mains) {
-                    menuArea.innerHTML += buildCategoryCard("Chicken Flavors", "fa-drumstick-bite text-warning", promoData.mains, myPaxCount, "mains", true);
+                    const cardTitle = myPromoType === 'TM1' ? "Chicken Refill (Original)" : "Chicken Flavors";
+                    menuArea.innerHTML += buildCategoryCard(cardTitle, "fa-drumstick-bite text-warning", promoData.mains, myPaxCount, "mains", true);
                 }
                 
                 // 2. Rice & Dip (Item Limit = Pax Count - kept exactly as it was)
