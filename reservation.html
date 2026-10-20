@@ -478,7 +478,7 @@
                         type="text"
                         id="resTableSize"
                         class="form-control fw-bold"
-                        placeholder="Select a table from floor map..."
+                        placeholder="Please select a time slot first..."
                         readonly
                         required
                       />
@@ -487,6 +487,7 @@
                         class="btn text-white fw-bold px-3 px-md-4"
                         style="background-color: var(--toms-orange)"
                         id="openTableSelectionBtn"
+                        disabled
                       >
                         <i class="fa-solid fa-map me-1"></i> Choose Table
                       </button>
@@ -1304,7 +1305,35 @@
         document.getElementById("confirmTableBtn").disabled = false;
       };
 
-      document.getElementById("resTime").addEventListener("change", syncReservationSummary);
+      function syncTableSelectionButtonState() {
+        const timeInput = document.getElementById("resTime");
+        const mapBtn = document.getElementById("openTableSelectionBtn");
+        const tableInput = document.getElementById("resTableSize");
+        if (!timeInput || !mapBtn) return;
+        if (!timeInput.value) {
+          mapBtn.disabled = true;
+          tableInput.value = "";
+          tableInput.placeholder = "Please select a time slot first...";
+          selectedTable = null;
+        } else {
+          mapBtn.disabled = false;
+          tableInput.placeholder = "Select a table from floor map...";
+        }
+      }
+
+      document.getElementById("resTime").addEventListener("change", () => {
+        selectedTable = null;
+        document.getElementById("resTableSize").value = "";
+        syncTableSelectionButtonState();
+        syncReservationSummary();
+      });
+
+      document.getElementById("resDate").addEventListener("change", () => {
+        selectedTable = null;
+        document.getElementById("resTableSize").value = "";
+        syncTableSelectionButtonState();
+        syncReservationSummary();
+      });
 
       document.getElementById("resPax").addEventListener("input", function () {
         let val = parseInt(this.value);
@@ -1380,6 +1409,7 @@
       document
         .getElementById("openTableSelectionBtn")
         .addEventListener("click", () => {
+          if (!document.getElementById("resTime").value) return;
           tableSelectionModal.show();
         });
 
@@ -1836,6 +1866,25 @@
             return;
           }
 
+          const checkDate = document.getElementById("resDate").value;
+          const checkTime = document.getElementById("resTime").value;
+          const checkTableMatch = document.getElementById("resTableSize").value.match(/Table (\d+)/);
+          if (checkTableMatch) {
+            const checkTableId = checkTableMatch[1];
+            if (
+              reservationData[checkDate] &&
+              reservationData[checkDate][checkTime] &&
+              reservationData[checkDate][checkTime].tables &&
+              reservationData[checkDate][checkTime].tables[checkTableId] === true
+            ) {
+              showReservationError(`Table ${checkTableId} is already reserved for ${checkTime}. Please select another table.`);
+              selectedTable = null;
+              document.getElementById("resTableSize").value = "";
+              syncTableSelectionButtonState();
+              return;
+            }
+          }
+
           const paxCount = parseInt(document.getElementById("resPax").value);
           if (isNaN(paxCount) || paxCount < 1 || paxCount > 15) {
             showReservationError("Party size must be between 1 and 15 guests.");
@@ -2030,6 +2079,7 @@
                 pax: document.getElementById("resPax").value,
                 tableSize: document.getElementById("resTableSize").value,
                 notes: compiledNotes,
+                receiptUrl: receiptUrl,
                 type: "online",
                 status: "pending",
             });

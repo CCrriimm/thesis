@@ -119,14 +119,22 @@
         <h2 class="fw-bold">Payment Management</h2>
       </div>
 
-      <ul class="nav nav-pills mb-3" id="paymentTabs">
-        <li class="nav-item">
-          <a class="nav-link active" href="#" onclick="filterPayments('pending', event)">Pending Verification</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#" onclick="filterPayments('history', event)">Payment History</a>
-        </li>
-      </ul>
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <ul class="nav nav-pills" id="paymentTabs">
+          <li class="nav-item">
+            <a class="nav-link active" href="#" onclick="filterPayments('pending', event)">Pending Verification</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#" onclick="filterPayments('history', event)">Payment History</a>
+          </li>
+        </ul>
+        <div id="historySearchWrap" class="d-none" style="min-width: 280px; max-width: 360px;">
+          <div class="input-group input-group-sm shadow-sm">
+            <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+            <input type="text" id="paymentHistorySearch" class="form-control border-start-0" placeholder="Search Ref ID (#OTG...) or Name..." />
+          </div>
+        </div>
+      </div>
 
       <div class="card shadow-sm border-0">
         <div class="card-body">
@@ -646,6 +654,20 @@
           if (currentView === "pending") return p.status === "pending";
           if (currentView === "history") return p.status !== "pending";
         });
+
+        // Search filter (Payment History tab only)
+        const searchInput = document.getElementById("paymentHistorySearch");
+        const searchQ = searchInput ? searchInput.value.trim().toLowerCase() : "";
+        if (currentView === "history" && searchQ) {
+          const cleanQ = searchQ.replace(/^#/, "");
+          filtered = filtered.filter((p) => {
+            const rawId = (p.id || "").toLowerCase();
+            const shortId = rawId.length > 5 ? rawId.substring(1, 6).toLowerCase() : rawId;
+            const name = (p.customerName || "").toLowerCase();
+            return rawId.includes(cleanQ) || shortId.includes(cleanQ) || name.includes(searchQ);
+          });
+        }
+
         filtered.sort((a, b) => b.rawTime - a.rawTime);
 
         if (filtered.length === 0) {
@@ -710,9 +732,26 @@
       window.filterPayments = function (view, event) {
         currentView = view;
         document.querySelectorAll("#paymentTabs .nav-link").forEach((link) => link.classList.remove("active"));
-        event.target.classList.add("active");
+        if (event && event.target) event.target.classList.add("active");
+
+        const searchWrap = document.getElementById("historySearchWrap");
+        const searchInput = document.getElementById("paymentHistorySearch");
+        if (searchWrap) {
+          if (view === "history") {
+            searchWrap.classList.remove("d-none");
+          } else {
+            searchWrap.classList.add("d-none");
+            if (searchInput) searchInput.value = "";
+          }
+        }
         renderTable();
       };
+
+      document.getElementById("paymentHistorySearch")?.addEventListener("input", () => {
+        if (currentView === "history") {
+          renderTable();
+        }
+      });
 
       function openReceiptModal(p, isHistory) {
         currentPaymentId = p.id;

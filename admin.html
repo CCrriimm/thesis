@@ -656,13 +656,56 @@
       };
 
       // ==========================================
-      // READY FOR PICKUP ORDERS LISTENER
+      // READY FOR PICKUP ORDERS LISTENER & PAST ORDERS AUTO-CLEANUP
       // ==========================================
+      let isOrdersAutoCancelling = false;
+      async function autoCancelPastOrdersDashboard(ordersList) {
+        if (isOrdersAutoCancelling || !ordersList || ordersList.length === 0) return;
+        isOrdersAutoCancelling = true;
+
+        try {
+          const now = new Date();
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+
+          const expiredOrders = ordersList.filter((o) => {
+            if (o.status !== "preparing" && o.status !== "pending" && o.status !== "approved") return false;
+            if (!o.timestamp) return false;
+            return o.timestamp < startOfToday;
+          });
+
+          if (expiredOrders.length === 0) {
+            isOrdersAutoCancelling = false;
+            return;
+          }
+
+          const cancelReason = "Guest No-Show / Unclaimed Order Past Scheduled Date";
+          for (const ord of expiredOrders) {
+            try {
+              await update(ref(db, "orders/" + ord.id), {
+                status: "cancelled",
+                rejectionReason: cancelReason,
+                cancellationReason: cancelReason,
+                cancelledBy: "system",
+                cancelledAt: Date.now()
+              });
+            } catch (err) {
+              console.error("[Orders Auto-Cancel] Error on item:", err);
+            }
+          }
+        } catch (e) {
+          console.error("[Orders Auto-Cancel] Global error:", e);
+        } finally {
+          isOrdersAutoCancelling = false;
+        }
+      }
+
       onValue(ref(db, "orders"), (snapshot) => {
         activeReadyOrders = [];
+        const allOrdersDashboard = [];
         if (snapshot.exists()) {
           snapshot.forEach((child) => {
             const order = child.val();
+            allOrdersDashboard.push({ id: child.key, ...order });
             // Chef marks order as status: 'done' when ready for pickup
             if (order.status === "done") {
               activeReadyOrders.push({
@@ -676,6 +719,7 @@
         // Sort latest first
         activeReadyOrders.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         renderReadyPickupOrders();
+        autoCancelPastOrdersDashboard(allOrdersDashboard);
       });
       }
 

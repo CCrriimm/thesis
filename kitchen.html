@@ -389,36 +389,36 @@
         return `${h12}:${minPadded} ${ampm}`;
       }
 
-      // Function to check if time is within 1 hour before the scheduled time
-      function isWithinOneHourBefore(dateStr, timeStr) {
-        if (!dateStr || !timeStr) return false;
+      // Checks if a reservation is scheduled for today and active for kitchen preparation
+      function isReservationForKitchenToday(res) {
+        if (!res) return false;
+        if (res.status !== "approved" && res.status !== "seated") return false;
+        if (!res.notes || res.notes.trim() === "" || res.foodStatus === "served") return false;
 
-        let now = new Date();
-        let { hours, minutes } = parseTimeTo24(timeStr);
-        let resTime = new Date(dateStr);
-        resTime.setHours(hours, minutes, 0, 0);
-
-        if (isNaN(resTime.getTime())) return false;
-
-        let diffInMinutes = (resTime - now) / (1000 * 60);
-
-        // Show in kitchen if within 1 hour before OR up to 2 hours after
-        return diffInMinutes <= 60 && diffInMinutes >= -120;
+        if (res.date) {
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, "0");
+          const day = String(now.getDate()).padStart(2, "0");
+          const todayStr = `${year}-${month}-${day}`;
+          if (res.date !== todayStr) return false;
+        }
+        return true;
       }
 
-      // For online orders with pickupTime (supports "14:30" or "2:30 PM")
-      function isOrderWithinOneHourBefore(pickupTimeStr) {
-        if (!pickupTimeStr) return false;
-
-        let now = new Date();
-        let { hours, minutes } = parseTimeTo24(pickupTimeStr);
-        let orderTime = new Date();
-        orderTime.setHours(hours, minutes, 0, 0);
-
-        let diffInMinutes = (orderTime - now) / (1000 * 60);
-
-        // Show in kitchen if within 1 hour before pickup time
-        return diffInMinutes <= 60 && diffInMinutes >= -120;
+      // Online orders with status 'preparing' stay visible on kitchen board until marked ready
+      function isOrderForKitchenToday(order) {
+        if (!order || order.status !== "preparing") return false;
+        if (order.timestamp) {
+          const orderDate = new Date(order.timestamp);
+          const now = new Date();
+          const isToday =
+            orderDate.getFullYear() === now.getFullYear() &&
+            orderDate.getMonth() === now.getMonth() &&
+            orderDate.getDate() === now.getDate();
+          if (!isToday) return false;
+        }
+        return true;
       }
 
       function initKitchen() {
@@ -502,14 +502,14 @@
         }
 
         for (let i = 0; i < activeOrders.length; i++) {
-          if (isOrderWithinOneHourBefore(activeOrders[i].pickupTime)) {
+          if (isOrderForKitchenToday(activeOrders[i])) {
             allTickets.push(activeOrders[i]);
             onlineCount++;
           }
         }
 
         for (let i = 0; i < activeReservations.length; i++) {
-          if (isWithinOneHourBefore(activeReservations[i].date, activeReservations[i].time)) {
+          if (isReservationForKitchenToday(activeReservations[i])) {
             allTickets.push(activeReservations[i]);
             reservationCount++;
           }
@@ -717,16 +717,27 @@
             const diffMs = pickupDate - now;
             if (diffMs > 0) {
               const minutesLeft = Math.floor(diffMs / (1000 * 60));
-              countdownEl.innerHTML = `⏱️ Pickup in: ${minutesLeft} minutes`;
+              const hoursLeft = Math.floor(minutesLeft / 60);
+              const minsLeft = minutesLeft % 60;
+              if (hoursLeft > 0) {
+                countdownEl.innerHTML = `⏱️ Pickup in: ${hoursLeft}h ${minsLeft}m`;
+              } else {
+                countdownEl.innerHTML = `⏱️ Pickup in: ${minutesLeft} minutes`;
+              }
               countdownEl.style.backgroundColor =
                 minutesLeft <= 30 ? "#ff9800" : "#4caf50";
             } else {
-              countdownEl.innerHTML = "⚠️ Overdue for pickup!";
-              countdownEl.style.backgroundColor = "#f44336";
+              const overdueMins = Math.abs(Math.floor(diffMs / (1000 * 60)));
+              const overdueH = Math.floor(overdueMins / 60);
+              const overdueM = overdueMins % 60;
+              const overdueText = overdueH > 0 ? `${overdueH}h ${overdueM}m` : `${overdueM}m`;
+              countdownEl.innerHTML = `⚠️ Overdue for pickup! (${overdueText} late)`;
+              countdownEl.style.backgroundColor = "#dc3545";
             }
             countdownEl.style.color = "white";
             countdownEl.style.padding = "4px 8px";
             countdownEl.style.borderRadius = "20px";
+            countdownEl.style.fontWeight = "bold";
           }
         });
       }

@@ -215,8 +215,8 @@
               <div class="mb-3">
                 <label class="form-label fw-bold small">Pickup Time</label>
                 <input type="time" id="pickupTime" class="form-control" min="11:00" max="22:00" required />
-                <small class="text-muted d-block mt-1" style="font-size: 0.74rem;">
-                  <i class="fa-regular fa-clock me-1 text-primary"></i> Operating hours: <b>11:00 AM – 10:00 PM</b> (Minimum 30-min preparation time)
+                <small class="text-muted d-block mt-1" style="font-size: 0.74rem;" id="pickupTimeHelper">
+                  <i class="fa-regular fa-clock me-1 text-primary"></i> Operating hours: <b>11:00 AM – 10:00 PM</b> (Orders need at least 30 minutes for fresh preparation)
                 </small>
               </div>
               <div class="payment-box mb-4 text-center">
@@ -922,6 +922,28 @@
         if (!input.value || input.value < minStr) {
           input.value = minStr;
         }
+
+        const helperEl = document.getElementById("pickupTimeHelper");
+        if (helperEl) {
+          helperEl.innerHTML = `<i class="fa-regular fa-clock me-1 text-primary"></i> Earliest pickup is <b>${formatTo12Hour(minStr)}</b> (Orders need at least 30 minutes for fresh preparation).`;
+        }
+      }
+
+      const pickupTimeInput = document.getElementById("pickupTime");
+      if (pickupTimeInput) {
+        pickupTimeInput.addEventListener("invalid", function () {
+          if (this.validity.rangeUnderflow) {
+            const earliestFormatted = formatTo12Hour(this.min || "11:00");
+            this.setCustomValidity(`Our kitchen needs at least 30 minutes to prepare your order fresh. Please select a pickup time of ${earliestFormatted} or later.`);
+          } else if (this.validity.rangeOverflow) {
+            this.setCustomValidity("Pickup orders must be scheduled before our 10:00 PM closing.");
+          } else if (this.validity.valueMissing) {
+            this.setCustomValidity("Please choose a pickup time.");
+          }
+        });
+        pickupTimeInput.addEventListener("input", function () {
+          this.setCustomValidity("");
+        });
       }
 
       const cartModalEl = document.getElementById("cartModal");
@@ -977,7 +999,7 @@
             const minH = Math.floor(minAllowedMinutes / 60);
             const minM = minAllowedMinutes % 60;
             const minFormatted = formatTo12Hour(`${String(minH).padStart(2, "0")}:${String(minM).padStart(2, "0")}`);
-            showCheckoutError(`Pickup time must be at least 30 minutes from now for kitchen preparation (earliest available: ${minFormatted}).`);
+            showCheckoutError(`Our kitchen needs at least 30 minutes to prepare your order fresh. Please select a pickup time of ${minFormatted} or later.`);
           }
           return;
         }

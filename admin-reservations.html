@@ -279,8 +279,8 @@
               <div class="mt-3">
                 <label class="form-label fw-bold small text-muted">Table Selection</label>
                 <div class="input-group">
-                  <input type="text" id="resTableSize" class="form-control" placeholder="Select a table..." readonly required />
-                  <button type="button" class="btn text-white fw-bold" style="background-color: var(--toms-orange);" id="openTableSelectionBtn">
+                  <input type="text" id="resTableSize" class="form-control" placeholder="Please select a time slot first..." readonly required />
+                  <button type="button" class="btn text-white fw-bold" style="background-color: var(--toms-orange);" id="openTableSelectionBtn" disabled>
                     <i class="fa-solid fa-map"></i> Map
                   </button>
                 </div>
@@ -887,6 +887,55 @@
               updatePayload.completedAt = Date.now();
             }
             await update(ref(db, "reservations/" + pendingResId), updatePayload);
+
+            // Synchronize physical table status in tables/{tableId}
+            const resObj = allRes.find((r) => r.id === pendingResId);
+            if (resObj && resObj.tableSize) {
+              const tableMatch = resObj.tableSize.match(/Table (\d+)/i);
+              if (tableMatch) {
+                const tableId = tableMatch[1];
+                if (pendingResStatus === "seated") {
+                  const notesStr = (resObj.notes || resObj.items || "").toUpperCase();
+                  let promoType = null;
+                  if (notesStr.includes("TM1")) promoType = "TM1";
+                  else if (notesStr.includes("TM2")) promoType = "TM2";
+                  else if (notesStr.includes("TM3")) promoType = "TM3";
+                  else if (notesStr.includes("TM4")) promoType = "TM4";
+                  else if (notesStr.includes("TM5")) promoType = "TM5";
+
+                  const paxCount = parseInt(resObj.pax) || 1;
+                  if (promoType) {
+                    const randomCode = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+                    await update(ref(db, "tables/" + tableId), {
+                      status: "occupied",
+                      code: randomCode,
+                      promo: promoType,
+                      pax: paxCount,
+                      startTime: Date.now(),
+                      isUnli: true
+                    });
+                  } else {
+                    await update(ref(db, "tables/" + tableId), {
+                      status: "occupied",
+                      code: "",
+                      promo: "Regular / Ala Carte",
+                      pax: paxCount,
+                      startTime: Date.now(),
+                      isUnli: false
+                    });
+                  }
+                } else if (pendingResStatus === "completed") {
+                  await update(ref(db, "tables/" + tableId), {
+                    status: "available",
+                    code: "",
+                    startTime: null,
+                    promo: null,
+                    pax: null,
+                    isUnli: null
+                  });
+                }
+              }
+            }
           } 
           catch (error) { console.error(error); } 
           finally {
@@ -928,6 +977,17 @@
             if (tableMatch) {
               const tableId = tableMatch[1];
               await remove(ref(db, `reservationSlots/${resObj.date}/${resObj.time}/tables/${tableId}`));
+              // Free physical table if active
+              if (resObj.status === "seated") {
+                await update(ref(db, "tables/" + tableId), {
+                  status: "available",
+                  code: "",
+                  startTime: null,
+                  promo: null,
+                  pax: null,
+                  isUnli: null
+                });
+              }
             }
           }
 
@@ -1022,6 +1082,7 @@
       window.openWalkInModal = function() {
         document.getElementById("reservationForm").reset();
         document.getElementById("resTableSize").value = "";
+        syncWalkInTableButton();
         advanceCart = {};
         updateTotalDisplay();
         document.getElementById("advanceOrderToggle").checked = false;
@@ -1192,6 +1253,34 @@
         const el = document.getElementById("walkInErrorAlert");
         if (el) el.classList.add("d-none");
       }
+
+      function syncWalkInTableButton() {
+        const timeInput = document.getElementById("resTime");
+        const mapBtn = document.getElementById("openTableSelectionBtn");
+        const tableInput = document.getElementById("resTableSize");
+        if (!timeInput || !mapBtn) return;
+        if (!timeInput.value) {
+          mapBtn.disabled = true;
+          tableInput.value = "";
+          tableInput.placeholder = "Please select a time slot first...";
+          selectedTable = null;
+        } else {
+          mapBtn.disabled = false;
+          tableInput.placeholder = "Select a table...";
+        }
+      }
+
+      document.getElementById("resTime")?.addEventListener("change", () => {
+        selectedTable = null;
+        document.getElementById("resTableSize").value = "";
+        syncWalkInTableButton();
+      });
+
+      document.getElementById("resDate")?.addEventListener("change", () => {
+        selectedTable = null;
+        document.getElementById("resTableSize").value = "";
+        syncWalkInTableButton();
+      });
 
       document.getElementById("openTableSelectionBtn").addEventListener("click", () => {
         if (!document.getElementById("resTime").value) {
@@ -1573,6 +1662,37 @@
           // Set Occupied Slot status to protect the table from other bookings
           await set(ref(db, `reservationSlots/${selectedDate}/${selectedTime}/tables/${tableId}`), true);
 
+          // Synchronize physical table status in tables/{tableId}
+          let promoType = null;
+          const notesText = (compiledNotes || "").toUpperCase();
+          if (notesText.includes("TM1")) promoType = "TM1";
+          else if (notesText.includes("TM2")) promoType = "TM2";
+          else if (notesText.includes("TM3")) promoType = "TM3";
+          else if (notesText.includes("TM4")) promoType = "TM4";
+          else if (notesText.includes("TM5")) promoType = "TM5";
+
+          const paxCount = parseInt(document.getElementById("resPax").value) || 1;
+          if (promoType) {
+            const randomCode = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+            await update(ref(db, "tables/" + tableId), {
+              status: "occupied",
+              code: randomCode,
+              promo: promoType,
+              pax: paxCount,
+              startTime: Date.now(),
+              isUnli: true
+            });
+          } else {
+            await update(ref(db, "tables/" + tableId), {
+              status: "occupied",
+              code: "",
+              promo: "Regular / Ala Carte",
+              pax: paxCount,
+              startTime: Date.now(),
+              isUnli: false
+            });
+          }
+
           // Push the Reservation
           await set(newResRef, {
             name: document.getElementById("wiName").value,
@@ -1582,7 +1702,7 @@
             tableSize: document.getElementById("resTableSize").value,
             notes: compiledNotes,
             type: "walk-in", // Indicates Admin added it
-            status: "approved", // Instantly approved
+            status: "seated", // Walk-in is immediately seated!
             timestamp: Date.now()
           });
 

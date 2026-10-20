@@ -76,7 +76,10 @@
     <div id="refillSection" class="container mobile-container mt-3 d-none">
         <div class="d-flex justify-content-between align-items-center mb-3 px-2">
             <h5 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-chair" style="color: var(--toms-orange);"></i> <span id="tableDisplay">Table ?</span></h5>
-            <span class="badge bg-dark" id="promoDisplayBadge">Loading...</span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success px-2 py-1 fw-bold d-none" id="diningTimerBadge"><i class="fa-solid fa-clock me-1"></i><span id="diningTimerText">2h 00m left</span></span>
+                <span class="badge bg-dark" id="promoDisplayBadge">Loading...</span>
+            </div>
         </div>
 
         <div id="orderArea">
@@ -223,6 +226,43 @@
     <script type="module">
         import { db, ref, get, push, onValue } from "./js/firebase-config.js";
 
+        let myStartTime = Date.now();
+        let diningInterval = null;
+        function startDiningTimer(startTime) {
+            if (diningInterval) clearInterval(diningInterval);
+            const badge = document.getElementById("diningTimerBadge");
+            const textEl = document.getElementById("diningTimerText");
+            if (!badge || !textEl) return;
+            badge.classList.remove("d-none");
+
+            function updateTimer() {
+                const elapsedMs = Date.now() - startTime;
+                const limitMs = 2 * 60 * 60 * 1000; // 2-hour dining limit
+                const remainingMs = limitMs - elapsedMs;
+
+                if (remainingMs <= 0) {
+                    badge.className = "badge bg-danger px-2 py-1 fw-bold";
+                    textEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i> Session Ended`;
+                    return;
+                }
+
+                const totalMins = Math.floor(remainingMs / (1000 * 60));
+                const hours = Math.floor(totalMins / 60);
+                const mins = totalMins % 60;
+                const timeFormatted = hours > 0 ? `${hours}h ${String(mins).padStart(2, "0")}m left` : `${mins}m left`;
+
+                textEl.innerText = timeFormatted;
+                if (totalMins <= 20) {
+                    badge.className = "badge bg-warning text-dark px-2 py-1 fw-bold";
+                } else {
+                    badge.className = "badge bg-success px-2 py-1 fw-bold";
+                }
+            }
+
+            updateTimer();
+            diningInterval = setInterval(updateTimer, 30000);
+        }
+
         let myTableNum = null;
         let myCurrentCode = ""; 
         let myPromoType = "";
@@ -350,6 +390,7 @@
                         myTableNum = child.key;
                         myPromoType = data.promo || "TM1"; 
                         myPaxCount = data.pax || 1; 
+                        myStartTime = data.startTime || Date.now();
                         found = true;
                     }
                 });
@@ -363,6 +404,7 @@
                 
                 loadSpecificPromoMenu(); 
                 listenToMyRefills(); 
+                startDiningTimer(myStartTime);
                 listenToAdminKick(); 
             } else {
                 showToast("Invalid or expired code.", false);

@@ -806,7 +806,18 @@
                         }
                     });
 
-                    myRes.sort((a,b) => new Date(b.date + " " + b.time) - new Date(a.date + " " + a.time));
+                    function parseResTimestamp(r) {
+                        if (r.timestamp) return r.timestamp;
+                        if (!r.date) return 0;
+                        let startHourStr = "00:00";
+                        if (r.time) {
+                            startHourStr = r.time.split("-")[0].trim();
+                        }
+                        const parsed = new Date(`${r.date} ${startHourStr}`).getTime();
+                        return isNaN(parsed) ? (new Date(r.date).getTime() || 0) : parsed;
+                    }
+
+                    myRes.sort((a,b) => parseResTimestamp(b) - parseResTimestamp(a));
 
                     myRes.forEach(r => {
                         hasData = true;
