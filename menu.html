@@ -542,40 +542,93 @@
         const qtyInput = document.getElementById("sqModalQty");
         qtyInput.value = 1;
 
-        // Render Options (if any)
-        const optWrap = document.getElementById("sqModalOptionsWrap");
-        const optList = document.getElementById("sqModalOptionsList");
-        optList.innerHTML = "";
-
-        if (itemData.options && itemData.options.length > 0) {
-          optWrap.classList.remove("d-none");
-          const count = itemData.optionCount || 1;
-          document.getElementById("sqModalOptionsLabel").innerHTML = `<i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select ${count} Flavor(s):`;
-          for (let i = 0; i < count; i++) {
-            let select = document.createElement("select");
-            select.className = "form-select mb-1 fw-bold";
-            select.id = `modal_flavor_${i}`;
-            itemData.options.forEach(opt => {
-              let optEl = document.createElement("option");
-              optEl.value = opt;
-              optEl.textContent = opt;
-              select.appendChild(optEl);
-            });
-            optList.appendChild(select);
-          }
-        } else {
-          optWrap.classList.add("d-none");
-        }
-
+        renderSQModalFlavors(1);
         updateSQModalSubtotal();
         selectQtyModalInstance.show();
       };
+
+      function renderSQModalFlavors(qty) {
+        if (!activeItemKey) return;
+        const itemData = currentMenuData[activeItemKey];
+        if (!itemData) return;
+
+        const optWrap = document.getElementById("sqModalOptionsWrap");
+        const optList = document.getElementById("sqModalOptionsList");
+        const optLabel = document.getElementById("sqModalOptionsLabel");
+
+        if (!itemData.options || itemData.options.length === 0) {
+          optWrap.classList.add("d-none");
+          optList.innerHTML = "";
+          return;
+        }
+
+        optWrap.classList.remove("d-none");
+        const perUnitCount = itemData.optionCount || 1;
+        const totalSets = qty;
+
+        // Preserve previously chosen values
+        const prevSelects = optList.querySelectorAll("select");
+        const existingValues = [];
+        prevSelects.forEach(s => existingValues.push(s.value));
+
+        let html = "";
+        let selectIdx = 0;
+
+        if (perUnitCount === 1) {
+          optLabel.innerHTML = `<i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select Flavor(s) (${qty} order${qty > 1 ? "s" : ""}):`;
+          for (let u = 0; u < totalSets; u++) {
+            const orderNum = u + 1;
+            const prevVal = existingValues[selectIdx] || itemData.options[0];
+            if (totalSets === 1) {
+              html += `
+                <select class="form-select form-select-sm fw-bold mb-1" id="modal_flavor_${selectIdx}">
+                  ${itemData.options.map(opt => `<option value="${opt}" ${opt === prevVal ? "selected" : ""}>${opt}</option>`).join("")}
+                </select>
+              `;
+            } else {
+              html += `
+                <div class="d-flex align-items-center gap-2 p-2 bg-light rounded border mb-1">
+                  <small class="fw-bold text-dark text-nowrap" style="min-width: 65px; font-size: 0.8rem;">Order #${orderNum}:</small>
+                  <select class="form-select form-select-sm fw-bold" id="modal_flavor_${selectIdx}">
+                    ${itemData.options.map(opt => `<option value="${opt}" ${opt === prevVal ? "selected" : ""}>${opt}</option>`).join("")}
+                  </select>
+                </div>
+              `;
+            }
+            selectIdx++;
+          }
+        } else {
+          optLabel.innerHTML = `<i class="fa-solid fa-pepper-hot text-danger me-1"></i> Select Flavor(s) (${qty} order${qty > 1 ? "s" : ""}, ${perUnitCount} flavors each):`;
+          for (let u = 0; u < totalSets; u++) {
+            const orderNum = u + 1;
+            html += `<div class="p-2 mb-2 bg-light rounded border">`;
+            html += `<small class="fw-bold text-dark d-block mb-1" style="font-size: 0.78rem;">Order #${orderNum} (${perUnitCount} Flavors):</small>`;
+            html += `<div class="d-flex flex-column gap-1">`;
+            for (let f = 0; f < perUnitCount; f++) {
+              const prevVal = existingValues[selectIdx] || itemData.options[Math.min(f, itemData.options.length - 1)];
+              html += `
+                <div class="d-flex align-items-center gap-2">
+                  <small class="text-muted" style="min-width: 55px; font-size: 0.75rem;">Flavor ${f + 1}:</small>
+                  <select class="form-select form-select-sm fw-bold" id="modal_flavor_${selectIdx}">
+                    ${itemData.options.map(opt => `<option value="${opt}" ${opt === prevVal ? "selected" : ""}>${opt}</option>`).join("")}
+                  </select>
+                </div>
+              `;
+              selectIdx++;
+            }
+            html += `</div></div>`;
+          }
+        }
+
+        optList.innerHTML = html;
+      }
 
       window.changeSQModalQty = function (delta) {
         const input = document.getElementById("sqModalQty");
         let val = parseInt(input.value) || 1;
         val = Math.min(30, Math.max(1, val + delta));
         input.value = val;
+        renderSQModalFlavors(val);
         updateSQModalSubtotal();
       };
 
@@ -584,9 +637,12 @@
         let val = parseInt(input.value);
         if (isNaN(val) || val < 1) {
           if (input.value !== "") input.value = 1;
+          val = 1;
         } else if (val > 30) {
           input.value = 30;
+          val = 30;
         }
+        renderSQModalFlavors(val);
         updateSQModalSubtotal();
       };
 
@@ -609,22 +665,36 @@
         let addQty = parseInt(qtyInput.value) || 1;
         addQty = Math.min(30, Math.max(1, addQty));
 
-        let selectedOptionsArray = [];
+        let chosenOption = "";
         if (itemData.options && itemData.options.length > 0) {
-          const count = itemData.optionCount || 1;
-          for (let i = 0; i < count; i++) {
+          const perUnit = itemData.optionCount || 1;
+          const totalFlavors = perUnit * addQty;
+          let chosen = [];
+          for (let i = 0; i < totalFlavors; i++) {
             const dropdown = document.getElementById(`modal_flavor_${i}`);
-            if (dropdown) selectedOptionsArray.push(dropdown.value);
+            if (dropdown && dropdown.value) chosen.push(dropdown.value);
+          }
+
+          if (chosen.length > 0) {
+            if (perUnit === 1) {
+              chosenOption = chosen.join(", ");
+            } else {
+              let sets = [];
+              for (let u = 0; u < addQty; u++) {
+                let setFlavors = chosen.slice(u * perUnit, (u + 1) * perUnit);
+                sets.push(`Set #${u + 1}: ${setFlavors.join(" + ")}`);
+              }
+              chosenOption = sets.join("; ");
+            }
           }
         }
 
-        let joinedOptions = selectedOptionsArray.join(", ");
-        const cartKey = joinedOptions ? `${activeItemKey}_${joinedOptions.replace(/[^a-zA-Z0-9]/g, '')}` : activeItemKey;
+        const cartKey = chosenOption ? `${activeItemKey}_${Date.now()}` : activeItemKey;
 
         if (cart[cartKey]) {
           cart[cartKey].qty = Math.min(30, cart[cartKey].qty + addQty);
         } else {
-          cart[cartKey] = { ...itemData, qty: addQty, chosenOption: joinedOptions };
+          cart[cartKey] = { ...itemData, qty: addQty, chosenOption: chosenOption };
         }
 
         saveCart();
