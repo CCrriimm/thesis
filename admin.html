@@ -757,7 +757,26 @@
         document.getElementById("modalPickupTime").innerText = formatTo12Hour(order.pickupTime) || "Standard Pickup";
         document.getElementById("modalTotalAmount").innerText = "₱" + parseFloat(order.total || 0).toFixed(2);
 
-        // Format items with line breaks
+        // Format items with line breaks respecting nested parentheses
+        function splitItemsRespectingParens(str) {
+          if (!str) return [];
+          const result = [];
+          let current = "";
+          let parenDepth = 0;
+          for (let i = 0; i < str.length; i++) {
+            const ch = str[i];
+            if (ch === "(") { parenDepth++; current += ch; }
+            else if (ch === ")") { if (parenDepth > 0) parenDepth--; current += ch; }
+            else if ((ch === "," || ch === "\n" || ch === ";") && parenDepth === 0) {
+              const t = current.trim();
+              if (t) result.push(t);
+              current = "";
+            } else { current += ch; }
+          }
+          if (current.trim()) result.push(current.trim());
+          return result;
+        }
+
         let formattedItems = "None";
         if (Array.isArray(order.items)) {
           formattedItems = order.items.map((i) => {
@@ -780,11 +799,46 @@
             return String(i);
           }).join("\n");
         } else {
-          formattedItems = String(order.items || "None")
-            .split(/[,;\n]/)
-            .map((i) => i.trim())
-            .filter(Boolean)
-            .join("\n");
+          const rawStr = String(order.items || "None");
+          const pieces = splitItemsRespectingParens(rawStr);
+          let expandedList = [];
+
+          pieces.forEach((piece) => {
+            let itemStr = piece.trim().replace(/,\s*$/, "");
+            if (!itemStr) return;
+            let qtyNum = 1;
+            let qty = "1x";
+            const qtyMatch = itemStr.match(/^(\d+)\s*[xX]?\s+(.*)/);
+            if (qtyMatch) {
+              qtyNum = parseInt(qtyMatch[1], 10) || 1;
+              qty = `${qtyNum}x`;
+              itemStr = qtyMatch[2].trim();
+            }
+            let name = itemStr;
+            let option = "";
+            const optMatch = itemStr.match(/^(.*?)\s*\((.*?)\)$/);
+            if (optMatch) {
+              name = optMatch[1].trim();
+              option = optMatch[2].trim();
+            }
+
+            if (qtyNum > 1 && option && option.includes(",")) {
+              const subFlavors = option.split(",").map(f => f.trim()).filter(Boolean);
+              if (subFlavors.length === qtyNum) {
+                const fCount = {};
+                subFlavors.forEach(f => { fCount[f] = (fCount[f] || 0) + 1; });
+                for (let [flv, count] of Object.entries(fCount)) {
+                  expandedList.push(`${count}x ${name} (${flv})`);
+                }
+                return;
+              }
+            }
+
+            const optStr = option ? ` (${option})` : "";
+            expandedList.push(`${qty} ${name}${optStr}`);
+          });
+
+          formattedItems = expandedList.join("\n");
         }
         document.getElementById("modalOrderItems").innerText = formattedItems || "None";
 

@@ -542,6 +542,65 @@
           return;
         }
 
+        function formatTicketItemsHtml(rawStr) {
+          if (!rawStr) return "No items";
+          let str = String(rawStr).replace(/\[ADVANCE ORDER\]/gi, "").replace(/Advance Order:/gi, "").trim();
+          const result = [];
+          let current = "";
+          let parenDepth = 0;
+          for (let i = 0; i < str.length; i++) {
+            const ch = str[i];
+            if (ch === "(") { parenDepth++; current += ch; }
+            else if (ch === ")") { if (parenDepth > 0) parenDepth--; current += ch; }
+            else if ((ch === "," || ch === "\n" || ch === ";") && parenDepth === 0) {
+              const t = current.trim();
+              if (t) result.push(t);
+              current = "";
+            } else { current += ch; }
+          }
+          if (current.trim()) result.push(current.trim());
+
+          let expanded = [];
+          result.forEach(piece => {
+            let itemStr = piece.trim().replace(/,\s*$/, "");
+            if (!itemStr) return;
+
+            let qtyNum = 1;
+            let qty = "1x";
+            const qtyMatch = itemStr.match(/^(\d+)\s*[xX]?\s+(.*)/);
+            if (qtyMatch) {
+              qtyNum = parseInt(qtyMatch[1], 10) || 1;
+              qty = `${qtyNum}x`;
+              itemStr = qtyMatch[2].trim();
+            }
+
+            let name = itemStr;
+            let option = "";
+            const optMatch = itemStr.match(/^(.*?)\s*\((.*?)\)$/);
+            if (optMatch) {
+              name = optMatch[1].trim();
+              option = optMatch[2].trim();
+            }
+
+            if (qtyNum > 1 && option && option.includes(",")) {
+              const subFlavors = option.split(",").map(f => f.trim()).filter(Boolean);
+              if (subFlavors.length === qtyNum) {
+                const fCount = {};
+                subFlavors.forEach(f => { fCount[f] = (fCount[f] || 0) + 1; });
+                for (let [flv, count] of Object.entries(fCount)) {
+                  expanded.push(`${count}x ${name} (${flv})`);
+                }
+                return;
+              }
+            }
+
+            const optStr = option ? ` (${option})` : "";
+            expanded.push(`${qty} ${name}${optStr}`);
+          });
+
+          return expanded.join("<br>");
+        }
+
         for (let i = 0; i < ticketsToDisplay.length; i++) {
           let ticket = ticketsToDisplay[i];
           let html = "";
@@ -559,7 +618,7 @@
                     </div>
                     <div class="ticket-time" style="color: #ff9800;">${new Date(ticket.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</div>
                   </div>
-                  <div class="ticket-items">${ticket.items.replace(/, /g, "<br>")}</div>
+                  <div class="ticket-items">${formatTicketItemsHtml(ticket.items)}</div>
                   ${actionBtn}
                 </div>
               </div>
@@ -575,7 +634,7 @@
                     </div>
                     <div class="ticket-time text-primary">${formatTo12Hour(ticket.pickupTime)}</div>
                   </div>
-                  <div class="ticket-items">${ticket.items.replace(/, /g, "<br>")}</div>
+                  <div class="ticket-items">${formatTicketItemsHtml(ticket.items)}</div>
                   <div class="countdown-timer text-center mb-2" id="countdown_${ticket.id}">Loading...</div>
                   <button onclick="triggerAction('online', '${ticket.id}', null, 'Mark this online order as ready for pickup?')" class="btn-done w-100">Ready for Pickup</button>
                 </div>
@@ -601,7 +660,7 @@
                     </div>
                     <div class="ticket-time text-success">${displayTime}</div>
                   </div>
-                  <div class="ticket-items">${ticket.notes || ticket.items || "No notes"}</div>
+                  <div class="ticket-items">${formatTicketItemsHtml(ticket.notes || ticket.items)}</div>
                   <div class="countdown-timer text-center mb-2" id="countdown_${ticket.id}">Loading...</div>
                   <button onclick="triggerAction('reservation', '${ticket.id}', null, 'Mark this advance order as served to the table?')" class="btn-done w-100">Mark as Served</button>
                 </div>

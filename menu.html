@@ -665,36 +665,52 @@
         let addQty = parseInt(qtyInput.value) || 1;
         addQty = Math.min(30, Math.max(1, addQty));
 
-        let chosenOption = "";
-        if (itemData.options && itemData.options.length > 0) {
-          const perUnit = itemData.optionCount || 1;
-          const totalFlavors = perUnit * addQty;
-          let chosen = [];
-          for (let i = 0; i < totalFlavors; i++) {
-            const dropdown = document.getElementById(`modal_flavor_${i}`);
-            if (dropdown && dropdown.value) chosen.push(dropdown.value);
+        const perUnit = itemData.optionCount || 1;
+        const hasOptions = itemData.options && itemData.options.length > 0;
+
+        if (hasOptions) {
+          // Group units by exact flavor combination (individual units or shared identical flavor)
+          const flavorGroups = {}; // flavorString -> count
+
+          for (let u = 0; u < addQty; u++) {
+            let unitFlavors = [];
+            for (let f = 0; f < perUnit; f++) {
+              const dropdown = document.getElementById(`modal_flavor_${u * perUnit + f}`);
+              if (dropdown && dropdown.value) {
+                unitFlavors.push(dropdown.value.trim());
+              }
+            }
+            // Use " + " for multi-flavor within a single unit (never comma)
+            const unitFlavorKey = unitFlavors.join(" + ");
+            flavorGroups[unitFlavorKey] = (flavorGroups[unitFlavorKey] || 0) + 1;
           }
 
-          if (chosen.length > 0) {
-            if (perUnit === 1) {
-              chosenOption = chosen.join(", ");
+          for (const [flavorStr, count] of Object.entries(flavorGroups)) {
+            const cleanOptKey = flavorStr.replace(/[^a-zA-Z0-9]/g, "_");
+            const cartKey = `${activeItemKey}__${cleanOptKey}`;
+
+            if (cart[cartKey]) {
+              cart[cartKey].qty = Math.min(30, cart[cartKey].qty + count);
             } else {
-              let sets = [];
-              for (let u = 0; u < addQty; u++) {
-                let setFlavors = chosen.slice(u * perUnit, (u + 1) * perUnit);
-                sets.push(`Set #${u + 1}: ${setFlavors.join(" + ")}`);
-              }
-              chosenOption = sets.join("; ");
+              cart[cartKey] = {
+                ...itemData,
+                qty: count,
+                chosenOption: flavorStr
+              };
             }
           }
-        }
-
-        const cartKey = chosenOption ? `${activeItemKey}_${Date.now()}` : activeItemKey;
-
-        if (cart[cartKey]) {
-          cart[cartKey].qty = Math.min(30, cart[cartKey].qty + addQty);
         } else {
-          cart[cartKey] = { ...itemData, qty: addQty, chosenOption: chosenOption };
+          // No flavor options (e.g. side dish, plain rice, beverage)
+          const cartKey = activeItemKey;
+          if (cart[cartKey]) {
+            cart[cartKey].qty = Math.min(30, cart[cartKey].qty + addQty);
+          } else {
+            cart[cartKey] = {
+              ...itemData,
+              qty: addQty,
+              chosenOption: ""
+            };
+          }
         }
 
         saveCart();

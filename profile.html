@@ -470,6 +470,65 @@
             return timeStr;
         }
 
+        function formatDisplayOrderItems(rawStr) {
+            if (!rawStr) return "None";
+            let str = String(rawStr).replace(/\[ADVANCE ORDER\]/gi, "").replace(/Advance Order:/gi, "").trim();
+            const result = [];
+            let current = "";
+            let parenDepth = 0;
+            for (let i = 0; i < str.length; i++) {
+                const ch = str[i];
+                if (ch === "(") { parenDepth++; current += ch; }
+                else if (ch === ")") { if (parenDepth > 0) parenDepth--; current += ch; }
+                else if ((ch === "," || ch === "\n" || ch === ";") && parenDepth === 0) {
+                    const t = current.trim();
+                    if (t) result.push(t);
+                    current = "";
+                } else { current += ch; }
+            }
+            if (current.trim()) result.push(current.trim());
+
+            let expanded = [];
+            result.forEach(piece => {
+                let itemStr = piece.trim().replace(/,\s*$/, "");
+                if (!itemStr) return;
+
+                let qtyNum = 1;
+                let qty = "1x";
+                const qtyMatch = itemStr.match(/^(\d+)\s*[xX]?\s+(.*)/);
+                if (qtyMatch) {
+                    qtyNum = parseInt(qtyMatch[1], 10) || 1;
+                    qty = `${qtyNum}x`;
+                    itemStr = qtyMatch[2].trim();
+                }
+
+                let name = itemStr;
+                let option = "";
+                const optMatch = itemStr.match(/^(.*?)\s*\((.*?)\)$/);
+                if (optMatch) {
+                    name = optMatch[1].trim();
+                    option = optMatch[2].trim();
+                }
+
+                if (qtyNum > 1 && option && option.includes(",")) {
+                    const subFlavors = option.split(",").map(f => f.trim()).filter(Boolean);
+                    if (subFlavors.length === qtyNum) {
+                        const fCount = {};
+                        subFlavors.forEach(f => { fCount[f] = (fCount[f] || 0) + 1; });
+                        for (let [flv, count] of Object.entries(fCount)) {
+                            expanded.push(`${count}x ${name} (${flv})`);
+                        }
+                        return;
+                    }
+                }
+
+                const optStr = option ? ` (${option})` : "";
+                expanded.push(`${qty} ${name}${optStr}`);
+            });
+
+            return expanded.join(", ");
+        }
+
         // Customer Cancellation Logic
         let pendingCancelType = null;
         let pendingCancelId = null;
@@ -762,7 +821,7 @@
 
                         let advanceBadge = "";
                         if (r.notes && r.notes.includes("[ADVANCE ORDER]")) {
-                            advanceBadge = `<div class="mt-2 small p-2 bg-light border rounded"><i class="fa-solid fa-utensils text-warning me-1"></i> <b>Advance Order:</b> ${r.notes.replace("[ADVANCE ORDER]", "").split("[NOTES]")[0].trim()}</div>`;
+                            advanceBadge = `<div class="mt-2 small p-2 bg-light border rounded"><i class="fa-solid fa-utensils text-warning me-1"></i> <b>Advance Order:</b> ${formatDisplayOrderItems(r.notes.replace("[ADVANCE ORDER]", "").split("[NOTES]")[0].trim())}</div>`;
                         }
 
                         let reasonBanner = "";
@@ -905,7 +964,7 @@
                                             ${badge}
                                         </div>
                                         <h5 class="fw-bold text-success mb-2">₱${parseFloat(o.total).toFixed(2)}</h5>
-                                        <div class="small mb-2 bg-light p-2 rounded border"><b>Items:</b> ${o.items}</div>
+                                        <div class="small mb-2 bg-light p-2 rounded border"><b>Items:</b> ${formatDisplayOrderItems(o.items)}</div>
                                         ${orderReasonBanner}
                                     </div>
                                     <div class="pt-2 border-top">

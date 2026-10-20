@@ -1980,29 +1980,29 @@
             let itemsList = [];
             for (let id in advanceCart) {
               let item = advanceCart[id];
-              let optStr = "";
+              if (!item || !item.qty) continue;
               if (item.options && item.options.length > 0) {
                 let perUnit = item.optionCount || 1;
-                let totalFlavors = perUnit * item.qty;
-                let chosen = [];
-                for (let i = 0; i < totalFlavors; i++) {
-                  let sel = document.getElementById(`flavor_${id}_${i}`);
-                  if (sel && sel.value) chosen.push(sel.value);
-                }
-                if (chosen.length > 0) {
-                  if (perUnit === 1) {
-                    optStr = ` (${chosen.join(", ")})`;
-                  } else {
-                    let sets = [];
-                    for (let u = 0; u < item.qty; u++) {
-                      let setFlavors = chosen.slice(u * perUnit, (u + 1) * perUnit);
-                      sets.push(`Set #${u + 1}: ${setFlavors.join(" + ")}`);
-                    }
-                    optStr = ` (${sets.join("; ")})`;
+                let flavorGroups = {}; // flavorString -> count
+
+                for (let u = 0; u < item.qty; u++) {
+                  let unitFlavors = [];
+                  for (let f = 0; f < perUnit; f++) {
+                    let selIdx = u * perUnit + f;
+                    let sel = document.getElementById(`flavor_${id}_${selIdx}`);
+                    if (sel && sel.value) unitFlavors.push(sel.value.trim());
                   }
+                  let flavorKey = unitFlavors.join(" + ");
+                  flavorGroups[flavorKey] = (flavorGroups[flavorKey] || 0) + 1;
                 }
+
+                for (let [flv, count] of Object.entries(flavorGroups)) {
+                  let optSuffix = flv ? ` (${flv})` : "";
+                  itemsList.push(`${count}x ${item.name}${optSuffix}`);
+                }
+              } else {
+                itemsList.push(`${item.qty}x ${item.name}`);
               }
-              itemsList.push(`${item.qty}x ${item.name}${optStr}`);
             }
             if (itemsList.length > 0) compiledNotes = "[ADVANCE ORDER] " + itemsList.join(", ");
         }
