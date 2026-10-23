@@ -754,7 +754,7 @@
             } else if (error.code === "auth/captcha-check-failed") {
               showError("Security verification failed. Please refresh and try again.");
             } else if (error.code === "auth/error-code:-39" || (error.message && (error.message.includes("-39") || error.message.includes("503")))) {
-              showError("Google SMS Service returned 503 (Domain not authorized or carrier gateway unavailable). Please add 'toms-chicken-restaurant.me' to Firebase Authorized Domains, or use Email Verification.");
+              showError("Google SMS Service returned 503 (carrier gateway unavailable). Please use Email Verification instead.");
             } else {
               showError("Could not send SMS code: " + error.message);
             }
