@@ -185,6 +185,7 @@
           >
             VERIFY & REGISTER
           </button>
+          <div id="recaptcha-container"></div>
         </form>
       </div>
       <div class="card-footer text-center bg-white py-3">
@@ -457,7 +458,7 @@
       // Initialize invisible reCAPTCHA for Firebase Phone Auth background verification
       function getRecaptchaVerifier() {
         if (!window.recaptchaVerifier) {
-          window.recaptchaVerifier = new RecaptchaVerifier(auth, "signupBtn", {
+          window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
             size: "invisible",
             callback: (response) => {
               // Invisible captcha resolved in background
@@ -633,12 +634,12 @@
         const cleanNameKey = `${fnameVal.toLowerCase()}_${lnameVal.toLowerCase()}`.replace(/[\.\#\$\[\]\/]/g, "_");
         try {
           const nameSnap = await get(ref(db, `takenNames/${cleanNameKey}`));
-          if (nameSnap.exists() && nameSnap.val() === true) {
+          if (nameSnap && nameSnap.exists && nameSnap.exists() && nameSnap.val() === true) {
             showError(`An account with the name "${fnameVal} ${lnameVal}" already exists. Please use a distinct name.`);
             return;
           }
         } catch (nameErr) {
-          console.warn("Name check note:", nameErr);
+          // Non-blocking if database rules restrict unauthenticated pre-check
         }
 
         const signupBtn = document.getElementById("signupBtn");
@@ -749,9 +750,11 @@
             } else if (error.code === "auth/too-many-requests") {
               showError("Too many SMS attempts sent. Please wait a few moments before trying again.");
             } else if (error.code === "auth/quota-exceeded") {
-              showError("Daily SMS quota exceeded (10/day limit). Please choose Email Verification instead.");
+              showError("Daily SMS quota exceeded. Please switch to Email Verification (Recommended).");
             } else if (error.code === "auth/captcha-check-failed") {
               showError("Security verification failed. Please refresh and try again.");
+            } else if (error.code === "auth/error-code:-39" || (error.message && (error.message.includes("-39") || error.message.includes("503")))) {
+              showError("Google SMS Service returned 503 (Domain not authorized or carrier gateway unavailable). Please add 'toms-chicken-restaurant.me' to Firebase Authorized Domains, or use Email Verification.");
             } else {
               showError("Could not send SMS code: " + error.message);
             }
