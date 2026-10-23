@@ -363,6 +363,7 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body text-center py-4">
+            <div id="confirmActionAlert" class="alert alert-danger py-2 px-3 small fw-bold d-none mb-3 text-start"></div>
             <p class="fs-5 fw-bold mb-0" id="confirmActionText">Are you sure?</p>
           </div>
           <div class="modal-footer justify-content-center">
@@ -461,8 +462,44 @@
     </div>
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      import { cancelReservationRecord } from "./js/reservation-utils.js";
       // IMPORT `set` and `remove` FOR RESERVATION SLOTS
       import { auth, db, ref, get, onAuthStateChanged, onValue, update, push, set, remove, signOut } from "./js/firebase-config.js";
+
+      async function generateUniqueUnliCode() {
+        try {
+          const snap = await get(ref(db, "tables"));
+          const activeCodes = new Set();
+          if (snap.exists()) {
+            snap.forEach((c) => {
+              const val = c.val();
+              if (val && val.status === "occupied" && val.code) {
+                activeCodes.add(String(val.code).trim().toUpperCase());
+              }
+            });
+          }
+          let code;
+          let attempts = 0;
+          do {
+            code = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+            attempts++;
+          } while (activeCodes.has(code) && attempts < 100);
+          return code;
+        } catch (e) {
+          console.error("Collision check fallback:", e);
+          return "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+        }
+      }
 
       let currentView = "upcoming";
       let allRes = [];
@@ -720,10 +757,11 @@
         tbody.innerHTML = "";
         let filtered = allRes.filter((r) => {
           if (currentView === "upcoming") {
-            if (r.type === "online" && r.status === "pending") return false; 
-            return (r.status === "pending" || r.status === "approved" || r.status === "seated");
+            // Online reservations MUST be verified and approved in Payment Management first
+            if (r.type === "online" && r.status === "pending") return false;
+            return (r.status === "approved" || r.status === "seated");
           }
-          return r.status === "completed" || r.status === "cancelled";
+          return r.status === "completed" || r.status === "cancelled" || r.status === "rejected";
         });
 
         filtered.sort((a, b) => {
@@ -774,10 +812,7 @@
 
           let actions = "";
           if (currentView === "upcoming") {
-            if (r.status === "pending") {
-              actions = `<button onclick="updateStatus('${r.id}', 'approved')" class="btn btn-sm btn-success w-100 mb-1 fw-bold">Approve</button>
-                         <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-sm btn-outline-danger w-100">Cancel</button>`;
-            } else if (r.status === "approved") {
+            if (r.status === "approved") {
               actions = `<button onclick="updateStatus('${r.id}', 'seated')" class="btn btn-sm bg-success w-100 fw-bold text-white mb-1">Check In</button>
                          <button onclick="updateStatus('${r.id}', 'cancelled')" class="btn btn-sm btn-outline-danger w-100">Cancel</button>`;
             } else if (r.status === "seated") {
@@ -785,15 +820,15 @@
             }
           }
 
-          let notesHTML = r.notes ? `<div class="order-note"><i class="fa-solid fa-utensils"></i> <b>Notes:</b><br>${r.notes}</div>` : "";
-          let reasonHTML = (r.status === "cancelled" && r.rejectionReason) 
-            ? `<div class="mt-1 p-1 bg-light border border-danger rounded text-danger small" style="font-size: 0.75rem;"><b>Reason:</b> ${r.rejectionReason}</div>` 
+          let notesHTML = r.notes ? `<div class="order-note"><i class="fa-solid fa-utensils"></i> <b>Notes:</b><br>${escapeHtml(r.notes)}</div>` : "";
+          let reasonHTML = (r.status === "cancelled" && (r.rejectionReason || r.cancellationReason)) 
+            ? `<div class="mt-1 p-1 bg-light border border-danger rounded text-danger small" style="font-size: 0.75rem;"><b>Reason:</b> ${escapeHtml(r.rejectionReason || r.cancellationReason)}</div>` 
             : "";
           tbody.innerHTML += `
             <tr>
-              <td><span class="fw-bold fs-6">${r.name}</span><br>${typeBadge}</td>
-              <td><span class="fw-bold">${r.date}</span><br><span class="text-muted"><i class="fa-regular fa-clock"></i> ${r.time}</span></td>
-              <td><span class="fw-bold"><i class="fa-solid fa-users"></i> ${r.pax} People</span><br><small class="text-muted">Table: ${r.tableSize}</small><br>${notesHTML}</td>
+              <td><span class="fw-bold fs-6">${escapeHtml(r.name || "Guest")}</span><br>${typeBadge}</td>
+              <td><span class="fw-bold">${escapeHtml(r.date)}</span><br><span class="text-muted"><i class="fa-regular fa-clock"></i> ${escapeHtml(r.time)}</span></td>
+              <td><span class="fw-bold"><i class="fa-solid fa-users"></i> ${escapeHtml(r.pax)} People</span><br><small class="text-muted">Table: ${escapeHtml(r.tableSize)}</small><br>${notesHTML}</td>
               <td>${statBadge}${reasonHTML}</td>
               <td style="width: 120px;">${actions}</td>
             </tr>
@@ -872,6 +907,13 @@
         let actionText = newStatus.toUpperCase();
         if (newStatus === "seated") actionText = "CHECK IN";
         if (newStatus === "completed") actionText = "END SESSION";
+        const alertBox = document.getElementById("confirmActionAlert");
+        if (alertBox) alertBox.classList.add("d-none");
+        const execBtn = document.getElementById("executeActionBtn");
+        if (execBtn) {
+          execBtn.disabled = false;
+          execBtn.innerHTML = "Confirm";
+        }
         document.getElementById('confirmActionText').innerText = `Update this reservation to ${actionText}?`;
         confirmActionModal.show();
       };
@@ -879,9 +921,46 @@
       document.getElementById('executeActionBtn').addEventListener('click', async () => {
           if (!pendingResId) return;
           const btn = document.getElementById('executeActionBtn');
+          const alertBox = document.getElementById("confirmActionAlert");
+          if (alertBox) alertBox.classList.add("d-none");
+
           btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
           btn.disabled = true;
           try {
+            const resObj = allRes.find((r) => r.id === pendingResId);
+            let tableId = null;
+            if (resObj && resObj.tableSize) {
+              const tableMatch = resObj.tableSize.match(/Table (\d+)/i);
+              if (tableMatch) tableId = tableMatch[1];
+            }
+
+            if (pendingResStatus === "seated" && tableId) {
+              // Guard 1: Must be today's reservation
+              const now = new Date();
+              const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+              if (resObj.date !== todayStr) {
+                if (alertBox) {
+                  alertBox.textContent = `Cannot check in: This booking is scheduled for ${resObj.date}. Only today's reservations can be checked in.`;
+                  alertBox.classList.remove("d-none");
+                }
+                btn.innerHTML = 'Confirm';
+                btn.disabled = true;
+                return;
+              }
+
+              // Guard 2: Physical table must not be already occupied
+              const tSnap = await get(ref(db, "tables/" + tableId));
+              if (tSnap.exists() && tSnap.val().status === "occupied") {
+                if (alertBox) {
+                  alertBox.textContent = `Cannot check in: Table ${tableId} is currently occupied. Please end or clear that table session first.`;
+                  alertBox.classList.remove("d-none");
+                }
+                btn.innerHTML = 'Confirm';
+                btn.disabled = true;
+                return;
+              }
+            }
+
             const updatePayload = { status: pendingResStatus };
             if (pendingResStatus === "completed") {
               updatePayload.completedAt = Date.now();
@@ -889,58 +968,62 @@
             await update(ref(db, "reservations/" + pendingResId), updatePayload);
 
             // Synchronize physical table status in tables/{tableId}
-            const resObj = allRes.find((r) => r.id === pendingResId);
-            if (resObj && resObj.tableSize) {
-              const tableMatch = resObj.tableSize.match(/Table (\d+)/i);
-              if (tableMatch) {
-                const tableId = tableMatch[1];
-                if (pendingResStatus === "seated") {
-                  const notesStr = (resObj.notes || resObj.items || "").toUpperCase();
-                  let promoType = null;
-                  if (notesStr.includes("TM1")) promoType = "TM1";
-                  else if (notesStr.includes("TM2")) promoType = "TM2";
-                  else if (notesStr.includes("TM3")) promoType = "TM3";
-                  else if (notesStr.includes("TM4")) promoType = "TM4";
-                  else if (notesStr.includes("TM5")) promoType = "TM5";
+            if (tableId) {
+              if (pendingResStatus === "seated") {
+                const notesStr = (resObj.notes || resObj.items || "").toUpperCase();
+                let promoType = null;
+                if (notesStr.includes("TM1")) promoType = "TM1";
+                else if (notesStr.includes("TM2")) promoType = "TM2";
+                else if (notesStr.includes("TM3")) promoType = "TM3";
+                else if (notesStr.includes("TM4")) promoType = "TM4";
+                else if (notesStr.includes("TM5")) promoType = "TM5";
 
-                  const paxCount = parseInt(resObj.pax) || 1;
-                  if (promoType) {
-                    const randomCode = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
-                    await update(ref(db, "tables/" + tableId), {
-                      status: "occupied",
-                      code: randomCode,
-                      promo: promoType,
-                      pax: paxCount,
-                      startTime: Date.now(),
-                      isUnli: true
-                    });
-                  } else {
-                    await update(ref(db, "tables/" + tableId), {
-                      status: "occupied",
-                      code: "",
-                      promo: "Regular / Ala Carte",
-                      pax: paxCount,
-                      startTime: Date.now(),
-                      isUnli: false
-                    });
-                  }
-                } else if (pendingResStatus === "completed") {
+                const paxCount = parseInt(resObj.pax) || 1;
+                if (promoType) {
+                  const randomCode = await generateUniqueUnliCode();
                   await update(ref(db, "tables/" + tableId), {
-                    status: "available",
+                    status: "occupied",
+                    code: randomCode,
+                    promo: promoType,
+                    pax: paxCount,
+                    startTime: Date.now(),
+                    isUnli: true
+                  });
+                } else {
+                  await update(ref(db, "tables/" + tableId), {
+                    status: "occupied",
                     code: "",
-                    startTime: null,
-                    promo: null,
-                    pax: null,
-                    isUnli: null
+                    promo: "Regular / Ala Carte",
+                    pax: paxCount,
+                    startTime: Date.now(),
+                    isUnli: false
                   });
                 }
+              } else if (pendingResStatus === "completed") {
+                await update(ref(db, "tables/" + tableId), {
+                  status: "available",
+                  code: "",
+                  startTime: null,
+                  promo: null,
+                  pax: null,
+                  isUnli: null
+                });
               }
             }
+            confirmActionModal.hide();
+            pendingResId = null;
+            pendingResStatus = null;
           } 
-          catch (error) { console.error(error); } 
+          catch (error) {
+            console.error(error);
+            if (alertBox) {
+              alertBox.textContent = "Action failed: " + error.message;
+              alertBox.classList.remove("d-none");
+            }
+          } 
           finally {
-              btn.innerHTML = 'Confirm'; btn.disabled = false;
-              confirmActionModal.hide(); pendingResId = null; pendingResStatus = null;
+            btn.innerHTML = 'Confirm';
+            btn.disabled = false;
           }
       });
 
@@ -970,53 +1053,32 @@
         btn.disabled = true;
 
         try {
-          // Free up reserved table slot in reservationSlots if exists
-          const resObj = allRes.find((r) => r.id === pendingResId);
-          if (resObj && resObj.date && resObj.time && resObj.tableSize) {
-            const tableMatch = resObj.tableSize.match(/Table (\d+)/);
-            if (tableMatch) {
-              const tableId = tableMatch[1];
-              await remove(ref(db, `reservationSlots/${resObj.date}/${resObj.time}/tables/${tableId}`));
-              // Free physical table if active
-              if (resObj.status === "seated") {
-                await update(ref(db, "tables/" + tableId), {
-                  status: "available",
-                  code: "",
-                  startTime: null,
-                  promo: null,
-                  pax: null,
-                  isUnli: null
-                });
-              }
-            }
-          }
-
-          await update(ref(db, "reservations/" + pendingResId), { 
-            status: "cancelled",
-            rejectionReason: finalReason,
+          const resObj = allRes.find((r) => r.id === pendingResId) || {};
+          await cancelReservationRecord({
+            db,
+            resId: pendingResId,
+            resData: resObj,
             cancelledBy: "admin",
-            cancelledAt: Date.now()
+            reason: finalReason,
+            update,
+            remove,
+            ref
           });
 
-          // Cancel linked payment in payments node
-          try {
-            const paySnap = await get(ref(db, 'payments'));
-            if (paySnap.exists()) {
-              paySnap.forEach((child) => {
-                const pData = child.val();
-                if (child.key === pendingResId || pData.reservationId === pendingResId) {
-                  update(ref(db, `payments/${child.key}`), {
-                    status: 'cancelled',
-                    rejectionReason: finalReason,
-                    cancellationReason: finalReason,
-                    cancelledBy: 'admin',
-                    cancelledAt: Date.now()
-                  });
-                }
+          // If reservation was actively seated, free physical table
+          if (resObj && resObj.status === "seated") {
+            const tMatch = (resObj.tableSize || "").match(/Table\s+(\d+)/i);
+            const tableId = resObj.tableId || (tMatch ? tMatch[1] : null);
+            if (tableId) {
+              await update(ref(db, "tables/" + tableId), {
+                status: "available",
+                code: "",
+                startTime: null,
+                promo: null,
+                pax: null,
+                isUnli: null
               });
             }
-          } catch (pErr) {
-            console.warn("Could not sync payment cancellation from admin:", pErr);
           }
 
           if (cancelReservationModal) cancelReservationModal.hide();
@@ -1659,50 +1721,20 @@
           const tableMatch = document.getElementById("resTableSize").value.match(/Table (\d+)/);
           const tableId = tableMatch[1];
 
-          // Set Occupied Slot status to protect the table from other bookings
+          // Set Occupied Slot status in reservationSlots to protect the table from other bookings
           await set(ref(db, `reservationSlots/${selectedDate}/${selectedTime}/tables/${tableId}`), true);
 
-          // Synchronize physical table status in tables/{tableId}
-          let promoType = null;
-          const notesText = (compiledNotes || "").toUpperCase();
-          if (notesText.includes("TM1")) promoType = "TM1";
-          else if (notesText.includes("TM2")) promoType = "TM2";
-          else if (notesText.includes("TM3")) promoType = "TM3";
-          else if (notesText.includes("TM4")) promoType = "TM4";
-          else if (notesText.includes("TM5")) promoType = "TM5";
-
-          const paxCount = parseInt(document.getElementById("resPax").value) || 1;
-          if (promoType) {
-            const randomCode = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
-            await update(ref(db, "tables/" + tableId), {
-              status: "occupied",
-              code: randomCode,
-              promo: promoType,
-              pax: paxCount,
-              startTime: Date.now(),
-              isUnli: true
-            });
-          } else {
-            await update(ref(db, "tables/" + tableId), {
-              status: "occupied",
-              code: "",
-              promo: "Regular / Ala Carte",
-              pax: paxCount,
-              startTime: Date.now(),
-              isUnli: false
-            });
-          }
-
-          // Push the Reservation
+          // Push the Reservation: saved as approved (not instant seated, staff checks them in when they arrive)
           await set(newResRef, {
             name: document.getElementById("wiName").value,
             date: selectedDate,
             time: selectedTime,
             pax: document.getElementById("resPax").value,
+            tableId: tableId,
             tableSize: document.getElementById("resTableSize").value,
             notes: compiledNotes,
-            type: "walk-in", // Indicates Admin added it
-            status: "seated", // Walk-in is immediately seated!
+            type: "walk-in",
+            status: "approved",
             timestamp: Date.now()
           });
 

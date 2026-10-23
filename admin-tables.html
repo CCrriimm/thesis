@@ -21,6 +21,7 @@
       .table-card { border: none; border-radius: 15px; transition: transform 0.2s; text-align: center; }
       .table-card:hover { transform: scale(1.03); }
       .status-available { background-color: #e8f5e9; border: 2px solid #4caf50; }
+      .status-reserved { background-color: #fffde7; border: 2px solid #ffb300; }
       .status-occupied { background-color: #ffebee; border: 2px solid #f44336; }
       .unli-code { font-size: 1.5rem; letter-spacing: 2px; color: #d32f2f; }
       .btn-orange { background-color: var(--toms-orange); color: white; }
@@ -104,19 +105,25 @@
         </div>
       </div>
 
-      <div class="modal fade" id="successModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header text-white" style="background-color: var(--toms-orange)">
-              <h5 class="modal-title fw-bold"><i class="fa-solid fa-circle-check"></i> Success</h5>
+      <!-- Bootstrap Toast for Success Feedback -->
+      <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+        <div
+          id="successToast"
+          class="toast align-items-center text-white border-0 shadow-lg"
+          style="background-color: var(--toms-orange)"
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <div class="d-flex">
+            <div class="toast-body fw-bold" id="successToastMsg">
+              <i class="fa-solid fa-circle-check me-2"></i> Done!
             </div>
-            <div class="modal-body text-center py-4">
-              <i class="fa-solid fa-circle-check fs-1 mb-3" style="color: var(--toms-orange)"></i>
-              <p class="fw-bold mb-0" id="successMessage"></p>
-            </div>
-            <div class="modal-footer justify-content-center">
-              <button type="button" class="btn text-white fw-bold" style="background-color: var(--toms-orange)" data-bs-dismiss="modal">OK</button>
-            </div>
+            <button
+              type="button"
+              class="btn-close btn-close-white me-2 m-auto"
+              data-bs-dismiss="toast"
+            ></button>
           </div>
         </div>
       </div>
@@ -152,6 +159,52 @@
     </div>
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      let successToastInstance = null;
+      function showSuccessToast(msg) {
+        const toastEl = document.getElementById("successToast");
+        const msgEl = document.getElementById("successToastMsg");
+        if (msgEl) msgEl.innerHTML = '<i class="fa-solid fa-circle-check me-2"></i>' + msg.replace(/\n/g, "<br>");
+        if (!successToastInstance && window.bootstrap && toastEl) {
+          successToastInstance = new bootstrap.Toast(toastEl, { delay: 4000 });
+        }
+        if (successToastInstance) successToastInstance.show();
+      }
+
+      async function generateUniqueUnliCode() {
+        try {
+          const snap = await get(ref(db, "tables"));
+          const activeCodes = new Set();
+          if (snap.exists()) {
+            snap.forEach((c) => {
+              const val = c.val();
+              if (val && val.status === "occupied" && val.code) {
+                activeCodes.add(String(val.code).trim().toUpperCase());
+              }
+            });
+          }
+          let code;
+          let attempts = 0;
+          do {
+            code = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+            attempts++;
+          } while (activeCodes.has(code) && attempts < 100);
+          return code;
+        } catch (e) {
+          console.error("Collision check fallback:", e);
+          return "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+        }
+      }
+
       import { auth, db, ref, get, onAuthStateChanged, onValue, update, signOut } from "./js/firebase-config.js";
 
       onAuthStateChanged(auth, async (user) => {
@@ -182,66 +235,119 @@
       });
 
       const TOTAL_TABLES = 13;
+      let cachedTablesData = {};
+      let cachedReservationsData = {};
+
+      function renderTablesGrid() {
+        const tableGrid = document.getElementById("tableGrid");
+        if (!tableGrid) return;
+        tableGrid.innerHTML = "";
+        let activeCount = 0;
+        let reservedCount = 0;
+
+        // Current date in YYYY-MM-DD
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+        for (let i = 1; i <= TOTAL_TABLES; i++) {
+          let tableInfo = cachedTablesData[i] || { status: "available", code: "" };
+          const isOccupied = tableInfo.status === "occupied";
+          if (isOccupied) activeCount++;
+
+          // Check if table has an approved reservation for today (Specific Objective 6)
+          let isReserved = false;
+          let matchingRes = null;
+          if (!isOccupied && cachedReservationsData) {
+            for (const [resId, r] of Object.entries(cachedReservationsData)) {
+              if (r && r.status === "approved" && r.date === todayStr && r.tableSize) {
+                const tMatch = r.tableSize.match(/Table\s+(\d+)/i);
+                if (tMatch && parseInt(tMatch[1], 10) === i) {
+                  isReserved = true;
+                  matchingRes = r;
+                  reservedCount++;
+                  break;
+                }
+              }
+            }
+          }
+
+          let cardClass = isOccupied ? "status-occupied" : (isReserved ? "status-reserved" : "status-available");
+          let isUnli = isOccupied && (tableInfo.isUnli !== false && Boolean(tableInfo.code));
+
+          let statusText = "";
+          let codeHTML = "";
+
+          if (isOccupied) {
+            if (isUnli) {
+              statusText = '<span class="text-danger fw-bold"><i class="fa-solid fa-user-check"></i> Occupied (Unli)</span>';
+              codeHTML = `
+                <h4 class="unli-code fw-bold my-2">${escapeHtml(tableInfo.code)}</h4>
+                <div class="badge bg-dark mb-3">${escapeHtml(tableInfo.promo || "Unli")} | ${escapeHtml(tableInfo.pax || 1)} Pax</div>
+                <div class="d-flex gap-2">
+                  <button onclick="viewTableQR(${i}, '${escapeHtml(tableInfo.code)}', '${escapeHtml(tableInfo.promo || '')}', ${parseInt(tableInfo.pax) || 1})" class="btn btn-dark btn-sm w-50 fw-bold"><i class="fa-solid fa-qrcode"></i> QR</button>
+                  <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-50 fw-bold">End</button>
+                </div>
+              `;
+            } else {
+              statusText = '<span class="text-danger fw-bold"><i class="fa-solid fa-chair"></i> Occupied (Dine-In)</span>';
+              codeHTML = `
+                <div class="my-2"><span class="badge bg-secondary px-2 py-1 fs-6">${escapeHtml(tableInfo.promo || "Regular / Ala Carte")}</span></div>
+                <div class="text-muted small mb-3">${escapeHtml(tableInfo.pax || 1)} Pax &bull; Regular Order</div>
+                <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-100 fw-bold">End Session</button>
+              `;
+            }
+          } else if (isReserved) {
+            statusText = '<span class="text-warning fw-bold"><i class="fa-solid fa-clock"></i> Reserved</span>';
+            const resTime = escapeHtml(matchingRes.time || "Today");
+            const resName = escapeHtml(matchingRes.name || matchingRes.customerName || "Guest");
+            const resPax = parseInt(matchingRes.pax) || 1;
+            codeHTML = `
+              <div class="my-3">
+                <span class="badge bg-warning text-dark px-2 py-1 fs-6">${resTime}</span>
+                <div class="text-muted small mt-1">${resName} &bull; ${resPax} Pax</div>
+              </div>
+              <button onclick="openPromoModal(${i})" class="btn btn-warning btn-sm w-100 fw-bold text-dark">Seat Early / Override</button>
+            `;
+          } else {
+            statusText = '<span class="text-success fw-bold"><i class="fa-solid fa-check-circle"></i> Available</span>';
+            codeHTML = `
+              <div class="my-4 text-muted small">No active code</div>
+              <button onclick="openPromoModal(${i})" class="btn btn-orange btn-sm w-100 fw-bold">Set Up Table</button>
+            `;
+          }
+
+          tableGrid.innerHTML += `
+            <div class="col-md-4 col-lg-3">
+              <div class="card table-card h-100 p-3 shadow-sm ${cardClass}">
+                <div class="card-body p-0">
+                  <h4 class="fw-bold mb-1">Table ${i}</h4>
+                  <div class="mb-2">${statusText}</div>
+                  ${codeHTML}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        let counterText = activeCount + " / " + TOTAL_TABLES + " Active";
+        if (reservedCount > 0) {
+          counterText += ` &bull; ${reservedCount} Reserved`;
+        }
+        document.getElementById("activeCount").innerHTML = counterText;
+      }
 
       function initAdminTables() {
         const tablesRef = ref(db, "tables");
         onValue(tablesRef, (snapshot) => {
-          const tableGrid = document.getElementById("tableGrid");
-          tableGrid.innerHTML = "";
-          let activeCount = 0;
-          let dbData = snapshot.exists() ? snapshot.val() : {};
+          cachedTablesData = snapshot.exists() ? snapshot.val() : {};
+          renderTablesGrid();
+        });
 
-          for (let i = 1; i <= TOTAL_TABLES; i++) {
-            let tableInfo = dbData[i] || { status: "available", code: "" };
-            const isOccupied = tableInfo.status === "occupied";
-            if (isOccupied) activeCount++;
-
-            let cardClass = isOccupied ? "status-occupied" : "status-available";
-            let isUnli = isOccupied && (tableInfo.isUnli !== false && Boolean(tableInfo.code));
-
-            let statusText = "";
-            let codeHTML = "";
-
-            if (isOccupied) {
-              if (isUnli) {
-                statusText = '<span class="text-danger fw-bold"><i class="fa-solid fa-user-check"></i> Occupied (Unli)</span>';
-                codeHTML = `
-                  <h4 class="unli-code fw-bold my-2">${tableInfo.code}</h4>
-                  <div class="badge bg-dark mb-3">${tableInfo.promo || "Unli"} | ${tableInfo.pax || 1} Pax</div>
-                  <div class="d-flex gap-2">
-                    <button onclick="viewTableQR(${i}, '${tableInfo.code}', '${tableInfo.promo}', ${tableInfo.pax})" class="btn btn-dark btn-sm w-50 fw-bold"><i class="fa-solid fa-qrcode"></i> QR</button>
-                    <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-50 fw-bold">End</button>
-                  </div>
-                `;
-              } else {
-                statusText = '<span class="text-danger fw-bold"><i class="fa-solid fa-chair"></i> Occupied (Dine-In)</span>';
-                codeHTML = `
-                  <div class="my-2"><span class="badge bg-secondary px-2 py-1 fs-6">${tableInfo.promo || "Regular / Ala Carte"}</span></div>
-                  <div class="text-muted small mb-3">${tableInfo.pax || 1} Pax &bull; Regular Order</div>
-                  <button onclick="clearTable(${i})" class="btn btn-outline-danger btn-sm w-100 fw-bold">End Session</button>
-                `;
-              }
-            } else {
-              statusText = '<span class="text-success fw-bold"><i class="fa-solid fa-check-circle"></i> Available</span>';
-              codeHTML = `
-                <div class="my-4 text-muted small">No active code</div>
-                <button onclick="openPromoModal(${i})" class="btn btn-orange btn-sm w-100 fw-bold">Set Up Table</button>
-              `;
-            }
-
-            tableGrid.innerHTML += `
-              <div class="col-md-4 col-lg-3">
-                <div class="card table-card h-100 p-3 shadow-sm ${cardClass}">
-                  <div class="card-body p-0">
-                    <h4 class="fw-bold mb-1">Table ${i}</h4>
-                    <div class="mb-2">${statusText}</div>
-                    ${codeHTML}
-                  </div>
-                </div>
-              </div>
-            `;
-          }
-          document.getElementById("activeCount").innerText = activeCount + " / " + TOTAL_TABLES + " Active";
+        // Specific Objective 6: Listen to reservations to reflect "Reserved" status
+        const resRef = ref(db, "reservations");
+        onValue(resRef, (snapshot) => {
+          cachedReservationsData = snapshot.exists() ? snapshot.val() : {};
+          renderTablesGrid();
         });
       }
 
@@ -279,9 +385,9 @@
           });
           promoModal.hide();
           btn.innerHTML = "Set Up Table"; btn.disabled = false;
-          document.getElementById("successMessage").textContent = `Table ${pendingTableNum} is now active (Regular Dine-In • ${pax} Pax).`;
+          showSuccessToast(`Table ${pendingTableNum} is now active (Regular Dine-In • ${pax} Pax).`);
         } else {
-          const randomCode = "UNLI-" + Math.floor(1000 + Math.random() * 9000);
+          const randomCode = await generateUniqueUnliCode();
           await update(ref(db, "tables/" + pendingTableNum), {
             status: "occupied",
             code: randomCode,
@@ -292,9 +398,8 @@
           });
           promoModal.hide();
           btn.innerHTML = "Generate Code"; btn.disabled = false;
-          document.getElementById("successMessage").textContent = `Table ${pendingTableNum} is active!\nCode: ${randomCode}\nPromo: ${selectedPromo} (${pax} Pax)`;
+          showSuccessToast(`Table ${pendingTableNum} is active!\nCode: ${randomCode}\nPromo: ${selectedPromo} (${pax} Pax)`);
         }
-        new bootstrap.Modal(document.getElementById("successModal")).show();
       });
 
       const qrModal = new bootstrap.Modal(document.getElementById('qrModal'));
@@ -321,9 +426,26 @@
       document.getElementById("confirmEndBtn").addEventListener("click", async function () {
         bootstrap.Modal.getInstance(document.getElementById("confirmEndModal")).hide();
         if (tableToEnd !== null) {
+          try {
+            const refillsSnap = await get(ref(db, "refills"));
+            if (refillsSnap.exists()) {
+              const refillUpdates = {};
+              refillsSnap.forEach((child) => {
+                const r = child.val();
+                if (r && String(r.tableNum) === String(tableToEnd) && (r.status === "preparing" || r.status === "serving")) {
+                  refillUpdates[`refills/${child.key}/status`] = "completed";
+                  refillUpdates[`refills/${child.key}/endedAt`] = Date.now();
+                }
+              });
+              if (Object.keys(refillUpdates).length > 0) {
+                await update(ref(db), refillUpdates);
+              }
+            }
+          } catch (refillErr) {
+            console.warn("Could not auto-complete refills on session end:", refillErr);
+          }
           await update(ref(db, "tables/" + tableToEnd), { status: "available", code: "", startTime: null, promo: null, pax: null, isUnli: null });
-          document.getElementById("successMessage").textContent = "Session for Table " + tableToEnd + " ended.";
-          new bootstrap.Modal(document.getElementById("successModal")).show();
+          showSuccessToast("Session for Table " + tableToEnd + " ended.");
           tableToEnd = null;
         }
       });

@@ -134,7 +134,8 @@
             <table class="table table-hover align-middle">
               <thead class="table-dark">
                 <tr>
-                  <th>Admin Name</th>
+                  <th>Staff Name</th>
+                  <th>Role</th>
                   <th>Contact Info</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -142,8 +143,8 @@
               </thead>
               <tbody id="adminsTableBody">
                 <tr>
-                  <td colspan="4" class="text-center text-muted">
-                    Loading admins...
+                  <td colspan="5" class="text-center text-muted">
+                    Loading staff accounts...
                   </td>
                 </tr>
               </tbody>
@@ -196,7 +197,7 @@
                   required
                 />
               </div>
-              <div class="mb-4">
+              <div class="mb-3">
                 <label class="form-label fw-bold small">Password</label>
                 <input
                   type="password"
@@ -205,6 +206,13 @@
                   minlength="6"
                   required
                 />
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-bold small">Staff Role</label>
+                <select id="newAdminRole" class="form-select" required>
+                  <option value="admin" selected>Admin (Full System Access)</option>
+                  <option value="chef">Chef (Kitchen Orders Only)</option>
+                </select>
               </div>
               <button
                 type="submit"
@@ -305,6 +313,16 @@
     <!-- Bootstrap Toasts -->
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
       import {
         app,
         auth,
@@ -320,7 +338,7 @@
 
       // Fixes the issue of the current user being logged out when creating a new admin
       // ===============================================================================
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
       import {
         getAuth,
         createUserWithEmailAndPassword,
@@ -372,30 +390,47 @@
         }
       });
 
+      let allExistingUsers = [];
+
       // only admin shows
       function initAdminUsers() {
         onValue(ref(db, "users"), (snapshot) => {
+          allExistingUsers = [];
           const tbody = document.getElementById("adminsTableBody");
           tbody.innerHTML = "";
           let hasAdmins = false;
 
           if (snapshot.exists()) {
+            const takenUpdates = {};
             snapshot.forEach((child) => {
               const data = child.val();
+              allExistingUsers.push({ id: child.key, ...data });
 
-              // Only show if role is admin
-              if (data.role === "admin") {
+              const fName = (data.firstName || "").trim().toLowerCase();
+              const lName = (data.lastName || "").trim().toLowerCase();
+              if (fName && lName) {
+                const key = `${fName}_${lName}`.replace(/[\.\#\$\[\]\/]/g, "_");
+                takenUpdates[`takenNames/${key}`] = true;
+              }
+
+              // Show both admin and chef staff accounts
+              if (data.role === "admin" || data.role === "chef") {
                 hasAdmins = true;
-                const uid = child.key;
+                const uid = escapeHtml(child.key);
 
                 // Display Name
                 let name = "";
-                const fullName = (data.firstName + " " + data.lastName).trim();
+                const fullName = ((data.firstName || "") + " " + (data.lastName || "")).trim();
                 if (fullName) {
                   name = fullName;
                 } else {
-                  name = "Admin";
+                  name = data.role === "chef" ? "Chef Staff" : "Admin";
                 }
+
+                // Role Badge
+                const roleBadge = data.role === "chef"
+                  ? '<span class="badge bg-warning text-dark"><i class="fa-solid fa-fire-burner me-1"></i>Chef</span>'
+                  : '<span class="badge bg-primary"><i class="fa-solid fa-user-shield me-1"></i>Admin</span>';
 
                 // Status Badge
                 let statusBadge = "";
@@ -420,8 +455,9 @@
 
                 tbody.innerHTML += `
                     <tr>
-                      <td class="fw-bold"><i class="fa-solid text-muted me-2"></i>${name}</td>
-                      <td><small>${data.email}</small></td>
+                      <td class="fw-bold"><i class="fa-solid text-muted me-2"></i>${escapeHtml(name)}</td>
+                      <td>${roleBadge}</td>
+                      <td><small>${escapeHtml(data.email || "")}</small></td>
                       <td>${statusBadge}</td>
                       <td style="width: 150px;">${actionBtn}</td>
                     </tr>
@@ -431,7 +467,11 @@
           }
 
           if (!hasAdmins)
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">No admins found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No staff or admin accounts found.</td></tr>`;
+
+          if (Object.keys(takenUpdates).length > 0) {
+            update(ref(db), takenUpdates).catch(() => {});
+          }
         });
       }
 
@@ -489,7 +529,7 @@
         });
       };
 
-      // create new admin
+      // create new staff (admin or chef)
       document
         .getElementById("addAdminForm")
         .addEventListener("submit", async (e) => {
@@ -498,13 +538,35 @@
           btn.disabled = true;
           btn.innerText = "Creating...";
 
+          const firstName = document.getElementById("newAdminFname").value.trim();
+          const lastName = document.getElementById("newAdminLname").value.trim();
+          const targetFullName = `${firstName} ${lastName}`.trim().toLowerCase();
+
+          // Check if name already exists
+          const nameConflict = allExistingUsers.some(u => {
+            const uFirst = (u.firstName || "").trim().toLowerCase();
+            const uLast = (u.lastName || "").trim().toLowerCase();
+            const uFull = `${uFirst} ${uLast}`.trim();
+            return (uFirst === firstName.toLowerCase() && uLast === lastName.toLowerCase()) || (uFull === targetFullName);
+          });
+
+          if (nameConflict) {
+            btn.disabled = false;
+            btn.innerText = "Create Account";
+            showError(`An account with the name "${firstName} ${lastName}" already exists. Please use a distinct name.`);
+            return;
+          }
+
+          let secondaryApp = null;
           try {
-            // Create a temporary secondary app so it doesn't log YOU out
-            const secondaryApp = initializeApp(app.options, "SecondaryApp");
+            // Create a temporary uniquely-named secondary app so it doesn't log YOU out
+            const appName = "SecondaryApp_" + Date.now();
+            secondaryApp = initializeApp(app.options, appName);
             const secondaryAuth = getAuth(secondaryApp);
 
-            const email = document.getElementById("newAdminEmail").value;
+            const email = document.getElementById("newAdminEmail").value.trim();
             const pass = document.getElementById("newAdminPass").value;
+            const selectedRole = document.getElementById("newAdminRole").value || "admin";
 
             const userCred = await createUserWithEmailAndPassword(
               secondaryAuth,
@@ -514,23 +576,42 @@
 
             // Add details to Realtime Database
             await set(ref(db, "users/" + userCred.user.uid), {
-              firstName: document.getElementById("newAdminFname").value,
-              lastName: document.getElementById("newAdminLname").value,
+              firstName: firstName,
+              lastName: lastName,
               email: email,
-              role: "admin",
+              role: selectedRole,
               status: "active",
             });
 
-            // Logout secondary app to clean up
+            // Register taken name
+            const cleanKey = `${firstName.toLowerCase()}_${lastName.toLowerCase()}`.replace(/[\.\#\$\[\]\/]/g, "_");
+            await set(ref(db, `takenNames/${cleanKey}`), true).catch(() => {});
+
+            // Clean up secondary auth
             await secondaryAuth.signOut();
 
             document.getElementById("addAdminForm").reset();
-          addAdminModal.hide();
-          showSuccess("New Admin account created successfully!");
+            addAdminModal.hide();
+            showSuccess(`New ${selectedRole === "chef" ? "Chef" : "Admin"} account created successfully!`);
           } catch (error) {
             console.error(error);
-            alert("Error: " + error.message);
+            let friendlyMsg = error.message;
+            if (error.code === "auth/email-already-in-use" || (error.message && error.message.includes("email-already-in-use"))) {
+              friendlyMsg = "This email address is already in use by another account.";
+            } else if (error.code === "auth/weak-password" || (error.message && error.message.includes("weak-password"))) {
+              friendlyMsg = "Password must be at least 6 characters.";
+            } else if (error.code === "auth/invalid-email" || (error.message && error.message.includes("invalid-email"))) {
+              friendlyMsg = "Please enter a valid email address.";
+            }
+            showError(friendlyMsg);
           } finally {
+            if (secondaryApp) {
+              try {
+                await deleteApp(secondaryApp);
+              } catch (delErr) {
+                console.warn("deleteApp error:", delErr);
+              }
+            }
             btn.disabled = false;
             btn.innerText = "Create Account";
           }

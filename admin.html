@@ -277,6 +277,26 @@
       </div>
     </div>
 
+    <!-- Confirm Delete Inquiry Modal -->
+    <div class="modal fade" id="deleteInquiryModal" tabindex="-1" data-bs-backdrop="static">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 rounded-4 overflow-hidden shadow-lg">
+          <div class="modal-header bg-danger text-white py-2">
+            <h6 class="modal-title fw-bold mb-0"><i class="fa-solid fa-trash-can me-1"></i> Delete Message</h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body p-3 text-center">
+            <p class="small text-muted mb-0">Permanently delete this customer message?</p>
+            <div id="deleteInquiryError" class="alert alert-danger py-1 px-2 small d-none mt-2 mb-0"></div>
+          </div>
+          <div class="modal-footer justify-content-center p-2 border-0 bg-light">
+            <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" id="confirmDeleteInquiryBtn" class="btn btn-danger btn-sm px-3 fw-bold">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Order Pickup Detail & Claim Modal -->
     <div class="modal fade" id="orderPickupModal" tabindex="-1" data-bs-backdrop="static">
       <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -317,11 +337,16 @@
               <div id="modalOrderItems" class="p-3 bg-light rounded border fs-6 font-monospace" style="white-space: pre-wrap;">--</div>
             </div>
           </div>
-          <div class="modal-footer bg-white border-top d-flex justify-content-between px-4 py-3">
+          <div class="modal-footer bg-white border-top d-flex justify-content-between px-4 py-3 gap-2 flex-wrap">
             <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-success px-5 py-2 fw-bold shadow-sm" id="claimOrderBtn">
-              <i class="fa-solid fa-check-double me-2"></i> Mark as Claimed
-            </button>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-danger px-4 py-2 fw-bold shadow-sm d-none" id="forfeitOrderBtn">
+                <i class="fa-solid fa-user-xmark me-2"></i> No-Show / Forfeited
+              </button>
+              <button type="button" class="btn btn-success px-5 py-2 fw-bold shadow-sm" id="claimOrderBtn">
+                <i class="fa-solid fa-check-double me-2"></i> Mark as Claimed
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -339,6 +364,7 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body p-4 bg-light">
+            <div id="inquiryActionAlert" class="alert alert-danger py-2 px-3 small d-none mb-3"></div>
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
               <span class="small fw-bold text-muted" id="inquiryCountText">Loading messages...</span>
               <div class="d-flex gap-2 align-items-center flex-nowrap">
@@ -373,6 +399,16 @@
     </div>
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
       import {
         auth,
         db,
@@ -614,15 +650,15 @@
               <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 d-flex flex-column justify-content-between border-start border-4" style="border-left: 4px solid #ff9800 !important;">
                 <div>
                   <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="badge" style="background-color: #ff9800; color: #000; font-size: 0.9rem;"><i class="fa-solid fa-chair me-1"></i> Table ${refill.tableNum}</span>
-                    <small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${timeFormatted}</small>
+                    <span class="badge" style="background-color: #ff9800; color: #000; font-size: 0.9rem;"><i class="fa-solid fa-chair me-1"></i> Table ${escapeHtml(refill.tableNum)}</span>
+                    <small class="text-muted"><i class="fa-regular fa-clock me-1"></i> ${escapeHtml(timeFormatted)}</small>
                   </div>
                   <h6 class="fw-bold text-dark mb-1">Refill Items:</h6>
                   <div class="p-2 rounded bg-light mb-3 font-monospace small" style="line-height: 1.5; color: #333; max-height: 140px; overflow-y: auto;">
-                    ${refill.items ? refill.items.replace(/, /g, "<br>") : "Refill items"}
+                    ${refill.items ? escapeHtml(refill.items).replace(/,\s*/g, "<br>") : "Refill items"}
                   </div>
                 </div>
-                <button type="button" class="btn btn-success w-100 fw-bold py-2 shadow-sm rounded-pill" onclick="markRefillServed('${refill.id}', '${refill.tableNum}', this)">
+                <button type="button" class="btn btn-success w-100 fw-bold py-2 shadow-sm rounded-pill" onclick="markRefillServed('${escapeHtml(refill.id)}', '${escapeHtml(refill.tableNum)}', this)">
                   <i class="fa-solid fa-check-double me-1"></i> Mark as Served
                 </button>
               </div>
@@ -737,6 +773,35 @@
         return timeStr;
       }
 
+      function getOrderPickupTimeMs(order) {
+        if (!order) return null;
+        const baseDate = order.timestamp ? new Date(order.timestamp) : new Date();
+        let hours = null;
+        let mins = null;
+
+        if (order.rawPickupTime && typeof order.rawPickupTime === "string") {
+          const parts = order.rawPickupTime.split(":");
+          if (parts.length >= 2) {
+            hours = parseInt(parts[0], 10);
+            mins = parseInt(parts[1], 10);
+          }
+        }
+        if (hours === null && order.pickupTime && typeof order.pickupTime === "string") {
+          const m = order.pickupTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+          if (m) {
+            hours = parseInt(m[1], 10);
+            mins = parseInt(m[2], 10);
+            const ampm = (m[3] || "").toUpperCase();
+            if (ampm === "PM" && hours < 12) hours += 12;
+            if (ampm === "AM" && hours === 12) hours = 0;
+          }
+        }
+        if (hours === null || mins === null || isNaN(hours) || isNaN(mins)) return null;
+
+        const pickupDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hours, mins, 0, 0);
+        return pickupDate.getTime();
+      }
+
       function renderReadyPickupOrders() {
         const container = document.getElementById("readyPickupOrdersContainer");
         const countBadge = document.getElementById("readyPickupCount");
@@ -761,18 +826,25 @@
           const totalFormatted = parseFloat(order.total || 0).toFixed(2);
           const pickupTime = formatTo12Hour(order.pickupTime) || "ASAP";
 
+          const pickupMs = getOrderPickupTimeMs(order);
+          const is30MinsLate = pickupMs !== null && (Date.now() - pickupMs >= 30 * 60 * 1000);
+          const lateBadge = is30MinsLate ? `<span class="badge bg-danger ms-1"><i class="fa-solid fa-clock-rotate-left me-1"></i> 30m+ Past Pickup</span>` : "";
+
           cardsHtml += `
             <div class="col-md-6 col-lg-4">
               <div class="pickup-card shadow-sm" onclick="openOrderModal('${order.id}')">
                 <div>
                   <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                    <span class="badge bg-success"><i class="fa-solid fa-bell me-1"></i> Ready for Pickup</span>
+                    <div>
+                      <span class="badge bg-success"><i class="fa-solid fa-bell me-1"></i> Ready for Pickup</span>
+                      ${lateBadge}
+                    </div>
                     <span class="fw-bold text-muted small">#${shortId}</span>
                   </div>
-                  <h5 class="fw-bold mb-1 text-dark">${order.customerName || "Customer"}</h5>
-                  <p class="text-muted small mb-2"><i class="fa-regular fa-clock me-1 text-primary"></i> Pickup Time: <strong class="text-primary">${pickupTime}</strong></p>
-                  <div class="p-2 bg-light rounded border small mb-3 text-truncate" title="${order.items || ''}">
-                    <i class="fa-solid fa-utensils me-1 text-warning"></i> ${itemsSummary}
+                  <h5 class="fw-bold mb-1 text-dark">${escapeHtml(order.customerName || "Customer")}</h5>
+                  <p class="text-muted small mb-2"><i class="fa-regular fa-clock me-1 text-primary"></i> Pickup Time: <strong class="text-primary">${escapeHtml(pickupTime)}</strong></p>
+                  <div class="p-2 bg-light rounded border small mb-3 text-truncate" title="${escapeHtml(order.items || '')}">
+                    <i class="fa-solid fa-utensils me-1 text-warning"></i> ${escapeHtml(itemsSummary)}
                   </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center pt-2 border-top">
@@ -886,11 +958,72 @@
         }
         document.getElementById("modalOrderItems").innerText = formattedItems || "None";
 
+        const forfeitBtn = document.getElementById("forfeitOrderBtn");
+        const pickupMs = getOrderPickupTimeMs(order);
+        const now = Date.now();
+        const is30MinsLate = pickupMs !== null && (now - pickupMs >= 30 * 60 * 1000);
+
+        if (forfeitBtn) {
+          if (is30MinsLate) {
+            forfeitBtn.classList.remove("d-none");
+          } else {
+            forfeitBtn.classList.add("d-none");
+          }
+        }
+
         if (!orderPickupModal) {
           orderPickupModal = new bootstrap.Modal(document.getElementById("orderPickupModal"));
         }
         orderPickupModal.show();
       };
+
+      // Mark Order as Forfeited / No-Show
+      document.getElementById("forfeitOrderBtn")?.addEventListener("click", async () => {
+        if (!currentModalOrderId) return;
+        const errEl = document.getElementById("modalClaimError");
+        if (errEl) errEl.classList.add("d-none");
+
+        const btn = document.getElementById("forfeitOrderBtn");
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i> Forfeiting...';
+        btn.disabled = true;
+
+        try {
+          const reason = "Customer No-Show / Unclaimed Past 30 Minutes";
+          await update(ref(db, "orders/" + currentModalOrderId), {
+            status: "forfeited",
+            rejectionReason: reason,
+            cancellationReason: reason,
+            forfeitedAt: Date.now(),
+            forfeitedBy: currentUserUid || "admin",
+          });
+
+          const snap = await get(ref(db, "orders/" + currentModalOrderId));
+          if (snap.exists()) {
+            const ordData = snap.val();
+            if (ordData.paymentId) {
+              await update(ref(db, "payments/" + ordData.paymentId), {
+                status: "forfeited",
+                rejectionReason: reason,
+                cancellationReason: reason,
+              }).catch(() => {});
+            }
+          }
+
+          currentModalOrderId = null;
+          if (orderPickupModal) {
+            orderPickupModal.hide();
+          }
+        } catch (error) {
+          console.error("Error forfeiting order:", error);
+          if (errEl) {
+            errEl.innerText = "Error forfeiting order: " + (error.message || "Please try again.");
+            errEl.classList.remove("d-none");
+          }
+        } finally {
+          btn.innerHTML = '<i class="fa-solid fa-user-xmark me-2"></i> No-Show / Forfeited';
+          btn.disabled = false;
+        }
+      });
 
       // Mark Order as Claimed
       document.getElementById("claimOrderBtn").addEventListener("click", async () => {
@@ -935,15 +1068,7 @@
       const inquiryTopicFilter = document.getElementById("inquiryTopicFilter");
       const markAllReadBtn = document.getElementById("markAllReadBtn");
 
-      function escapeHtml(str) {
-        if (!str) return "";
-        return String(str)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
-      }
+
 
       function getTimestampMs(item) {
         if (!item) return 0;
@@ -1095,20 +1220,49 @@
           });
         });
 
+        let pendingDeleteInquiryId = null;
+        let deleteInquiryModalInstance = null;
+        function getDeleteInquiryModal() {
+          if (!deleteInquiryModalInstance) {
+            const el = document.getElementById("deleteInquiryModal");
+            if (el && window.bootstrap) deleteInquiryModalInstance = new bootstrap.Modal(el);
+          }
+          return deleteInquiryModalInstance;
+        }
+
+        document.getElementById("confirmDeleteInquiryBtn")?.addEventListener("click", async () => {
+          if (!pendingDeleteInquiryId) return;
+          const btn = document.getElementById("confirmDeleteInquiryBtn");
+          const errBox = document.getElementById("deleteInquiryError");
+          if (errBox) errBox.classList.add("d-none");
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>';
+          try {
+            await remove(ref(db, "inquiries/" + pendingDeleteInquiryId));
+            const modal = getDeleteInquiryModal();
+            if (modal) modal.hide();
+            pendingDeleteInquiryId = null;
+          } catch (err) {
+            console.error("Delete inquiry error:", err);
+            if (errBox) {
+              errBox.textContent = "Failed to delete: " + err.message;
+              errBox.classList.remove("d-none");
+            }
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = "Delete";
+          }
+        });
+
         inquiriesList.querySelectorAll(".delete-inquiry-btn").forEach(btn => {
-          btn.addEventListener("click", async () => {
+          btn.addEventListener("click", () => {
             const inqId = btn.getAttribute("data-id");
             if (!inqId) return;
-            if (confirm("Delete this customer message from the database?")) {
-              btn.disabled = true;
-              try {
-                await remove(ref(db, "inquiries/" + inqId));
-              } catch (err) {
-                console.error("Delete inquiry error:", err);
-                alert("Failed to delete message: " + err.message);
-                btn.disabled = false;
-              }
-            }
+            pendingDeleteInquiryId = inqId;
+            const errBox = document.getElementById("deleteInquiryError");
+            if (errBox) errBox.classList.add("d-none");
+            const modal = getDeleteInquiryModal();
+            if (modal) modal.show();
           });
         });
       }
@@ -1119,6 +1273,8 @@
 
       if (markAllReadBtn) {
         markAllReadBtn.addEventListener("click", async () => {
+          const alertBox = document.getElementById("inquiryActionAlert");
+          if (alertBox) alertBox.classList.add("d-none");
           const unreadItems = allInquiries.filter(item => !item.read);
           if (unreadItems.length === 0) return;
           markAllReadBtn.disabled = true;
@@ -1132,8 +1288,13 @@
             await update(ref(db), updates);
           } catch (err) {
             console.error("Mark all read error:", err);
-            alert("Failed to mark all as read: " + err.message);
+            if (alertBox) {
+              alertBox.textContent = "Failed to mark all as read: " + err.message;
+              alertBox.classList.remove("d-none");
+            }
+          } finally {
             markAllReadBtn.disabled = false;
+            markAllReadBtn.innerHTML = '<i class="fa-solid fa-check-double me-1"></i> Mark All as Read';
           }
         });
       }

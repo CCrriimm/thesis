@@ -69,6 +69,12 @@
     // Expose session caching helper globally
     window.cacheUserSession = function(user, userData) {
         if (!user) return;
+        const status = (userData && userData.status) || "active";
+        if (status === "deactivated") {
+            window.clearUserSession();
+            window.location.replace("login.html");
+            return;
+        }
         const email = user.email || "";
         const role = (userData && userData.role) || "customer";
         const fullName = userData 
@@ -79,6 +85,7 @@
         setSessionVal("toms_user_logged_in", "true");
         setSessionVal("toms_user_email", email);
         setSessionVal("toms_user_role", role);
+        setSessionVal("toms_user_status", status);
         setSessionVal("toms_user_name", fullName);
         setSessionVal("toms_user_initial", initial);
     };
@@ -90,6 +97,7 @@
         removeSessionVal("toms_user_logged_in");
         removeSessionVal("toms_user_email");
         removeSessionVal("toms_user_role");
+        removeSessionVal("toms_user_status");
         removeSessionVal("toms_user_name");
         removeSessionVal("toms_user_initial");
     };
@@ -113,11 +121,18 @@
 
     // Sync session across storages if active
     if (isLoggedIn) {
+        const status = getSessionVal("toms_user_status");
+        if (status === "deactivated") {
+            window.clearUserSession();
+            window.location.replace("login.html");
+            return;
+        }
         const email = getSessionVal("toms_user_email");
         const name = getSessionVal("toms_user_name");
         const initial = getSessionVal("toms_user_initial");
         if (email) setSessionVal("toms_user_email", email);
         if (role) setSessionVal("toms_user_role", role);
+        if (status) setSessionVal("toms_user_status", status);
         if (name) setSessionVal("toms_user_name", name);
         if (initial) setSessionVal("toms_user_initial", initial);
     }
@@ -126,22 +141,37 @@
     const rawPath = window.location.pathname.toLowerCase();
     const page = rawPath.substring(rawPath.lastIndexOf("/") + 1) || "index.html";
 
-    const isAdminPage = page.startsWith("admin") || page.includes("kitchen");
-    const isCustomerProtected = !isAdminPage && (page.includes("profile") || page.includes("reservation") || page.includes("menu"));
+    const isAdminPage = page.startsWith("admin");
+    const isKitchenPage = page.includes("kitchen");
+    const isStaffPage = isAdminPage || isKitchenPage;
+    const isCustomerProtected = !isStaffPage && (page.includes("profile") || page.includes("reservation") || page.includes("menu"));
     const isAuthPage = page.includes("login") || page.includes("signup");
-    const isCustomerPublic = !isAdminPage && (page === "index.html" || page === "" || page.includes("about") || page.includes("contact"));
+    const isCustomerPublic = !isStaffPage && (page === "index.html" || page === "" || page.includes("about") || page.includes("contact"));
 
-    // 1. Admin Pages Guard (0ms pre-paint)
-    if (isAdminPage) {
+    // 1. Staff Pages Guard (0ms pre-paint)
+    if (isStaffPage) {
         if (!isLoggedIn) {
             window.location.replace("login.html");
             return;
         }
-        if (role !== "admin") {
-            window.location.replace("index.html");
-            return;
+        // Kitchen page allows both admin and chef
+        if (isKitchenPage) {
+            if (role !== "admin" && role !== "chef") {
+                window.location.replace("index.html");
+                return;
+            }
+        } else {
+            // All other admin pages strictly require admin role
+            if (role === "chef") {
+                window.location.replace("kitchen.html");
+                return;
+            }
+            if (role !== "admin") {
+                window.location.replace("index.html");
+                return;
+            }
         }
-        // Valid admin on admin page -> allow immediately and ensure body is visible
+        // Valid staff -> allow immediately and ensure body is visible
         if (document.body) {
             document.body.style.display = "";
         } else {
@@ -156,6 +186,10 @@
     if (isCustomerProtected) {
         if (role === "admin") {
             window.location.replace("admin.html");
+            return;
+        }
+        if (role === "chef") {
+            window.location.replace("kitchen.html");
             return;
         }
         if (!isLoggedIn) {
@@ -178,6 +212,8 @@
         if (isLoggedIn) {
             if (role === "admin") {
                 window.location.replace("admin.html");
+            } else if (role === "chef") {
+                window.location.replace("kitchen.html");
             } else {
                 window.location.replace("index.html");
             }
@@ -186,10 +222,16 @@
         return;
     }
 
-    // 4. Customer Public Pages: Keep Admins in their portal
-    if (isCustomerPublic && isLoggedIn && role === "admin") {
-        window.location.replace("admin.html");
-        return;
+    // 4. Customer Public Pages: Keep Admins & Chefs in their portals
+    if (isCustomerPublic && isLoggedIn) {
+        if (role === "admin") {
+            window.location.replace("admin.html");
+            return;
+        }
+        if (role === "chef") {
+            window.location.replace("kitchen.html");
+            return;
+        }
     }
 
     // 5. Zero-Flicker Navbar Pre-Renderer

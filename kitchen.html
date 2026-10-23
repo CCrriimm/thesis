@@ -312,6 +312,16 @@
     </div>
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
       import {
         auth,
         db,
@@ -331,15 +341,34 @@
         }
         try {
           const snap = await get(ref(db, "users/" + user.uid));
-          if (!snap.exists() || snap.val().role !== "admin") {
+          const uData = snap.exists() ? snap.val() : null;
+          const userRole = uData ? uData.role : null;
+          const userStatus = uData ? uData.status : null;
+
+          if (!snap.exists() || (userRole !== "admin" && userRole !== "chef") || userStatus === "deactivated") {
             if (window.clearUserSession) window.clearUserSession();
             else sessionStorage.clear();
-            window.location.replace("index.html");
+            window.location.replace(userStatus === "deactivated" ? "login.html" : "index.html");
             return;
           }
+
           if (window.cacheUserSession) {
-            window.cacheUserSession(user, snap.val());
+            window.cacheUserSession(user, uData);
           }
+
+          // Adjust sidebar for chef role: hide admin links so chef only has kitchen access
+          if (userRole === "chef") {
+            const sidebarHeader = document.querySelector(".sidebar-header h4");
+            if (sidebarHeader) sidebarHeader.innerText = "Tom's Kitchen";
+            const adminLinks = document.querySelectorAll(".sidebar-menu li a");
+            adminLinks.forEach((link) => {
+              const href = link.getAttribute("href");
+              if (href && href !== "kitchen.html" && href !== "#") {
+                link.parentElement.style.display = "none";
+              }
+            });
+          }
+
           document.body.style.display = "block";
           initKitchen();
         } catch (e) {
@@ -588,14 +617,14 @@
                 const fCount = {};
                 subFlavors.forEach(f => { fCount[f] = (fCount[f] || 0) + 1; });
                 for (let [flv, count] of Object.entries(fCount)) {
-                  expanded.push(`${count}x ${name} (${flv})`);
+                  expanded.push(`${escapeHtml(count)}x ${escapeHtml(name)} (${escapeHtml(flv)})`);
                 }
                 return;
               }
             }
 
-            const optStr = option ? ` (${option})` : "";
-            expanded.push(`${qty} ${name}${optStr}`);
+            const optStr = option ? ` (${escapeHtml(option)})` : "";
+            expanded.push(`${escapeHtml(qty)} ${escapeHtml(name)}${optStr}`);
           });
 
           return expanded.join("<br>");
@@ -605,8 +634,14 @@
           let ticket = ticketsToDisplay[i];
           let html = "";
 
+          const safeTicketId = escapeHtml(ticket.id);
+          const safeTableNum = escapeHtml(ticket.tableNum);
+          const safeCustomerName = escapeHtml(ticket.customerName || "Customer");
+          const safeResName = escapeHtml(ticket.name || ticket.customerName || "Guest");
+          const safeTableSize = escapeHtml(ticket.tableSize ? ticket.tableSize.split(",")[0] : "Table");
+
           if (ticket.type === "refill") {
-            let actionBtn = `<button onclick="triggerAction('refill', '${ticket.id}', 'serving', 'Notify front desk/floor staff that Table ${ticket.tableNum} refill is ready to serve?')" class="btn-done w-100" style="background-color: #ff9800; color: #000; font-weight: bold;"><i class=\"fa-solid fa-bell-concierge me-1\"></i> Serve to Table</button>`;
+            let actionBtn = `<button onclick="triggerAction('refill', '${safeTicketId}', 'serving', 'Notify front desk/floor staff that Table ${safeTableNum} refill is ready to serve?')" class="btn-done w-100" style="background-color: #ff9800; color: #000; font-weight: bold;"><i class=\"fa-solid fa-bell-concierge me-1\"></i> Serve to Table</button>`;
 
             html = `
               <div class="col-md-4 col-lg-3">
@@ -614,7 +649,7 @@
                   <div class="ticket-header">
                     <div>
                       <span class="badge mb-1" style="background-color: #ff9800; color: #000;">Table Refill</span><br>
-                      <small class="fw-bold ticket-customer">Table ${ticket.tableNum}</small>
+                      <small class="fw-bold ticket-customer">Table ${safeTableNum}</small>
                     </div>
                     <div class="ticket-time" style="color: #ff9800;">${new Date(ticket.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</div>
                   </div>
@@ -630,13 +665,13 @@
                   <div class="ticket-header">
                     <div>
                       <span class="badge bg-primary mb-1">Pickup Order</span><br>
-                      <small class="fw-bold ticket-customer">${ticket.customerName}</small>
+                      <small class="fw-bold ticket-customer">${safeCustomerName}</small>
                     </div>
                     <div class="ticket-time text-primary">${formatTo12Hour(ticket.pickupTime)}</div>
                   </div>
                   <div class="ticket-items">${formatTicketItemsHtml(ticket.items)}</div>
-                  <div class="countdown-timer text-center mb-2" id="countdown_${ticket.id}">Loading...</div>
-                  <button onclick="triggerAction('online', '${ticket.id}', null, 'Mark this online order as ready for pickup?')" class="btn-done w-100">Ready for Pickup</button>
+                  <div class="countdown-timer text-center mb-2" id="countdown_${safeTicketId}">Loading...</div>
+                  <button onclick="triggerAction('online', '${safeTicketId}', null, 'Mark this online order as ready for pickup?')" class="btn-done w-100">Ready for Pickup</button>
                 </div>
               </div>
             `;
@@ -656,13 +691,13 @@
                   <div class="ticket-header">
                     <div>
                       <span class="badge bg-success mb-1">Advance Order</span><br>
-                      <small class="ticket-customer fw-bold">${ticket.name || ticket.customerName} - ${ticket.tableSize ? ticket.tableSize.split(",")[0] : "Table"}</small>
+                      <small class="ticket-customer fw-bold">${safeResName} - ${safeTableSize}</small>
                     </div>
-                    <div class="ticket-time text-success">${displayTime}</div>
+                    <div class="ticket-time text-success">${escapeHtml(displayTime)}</div>
                   </div>
                   <div class="ticket-items">${formatTicketItemsHtml(ticket.notes || ticket.items)}</div>
-                  <div class="countdown-timer text-center mb-2" id="countdown_${ticket.id}">Loading...</div>
-                  <button onclick="triggerAction('reservation', '${ticket.id}', null, 'Mark this advance order as served to the table?')" class="btn-done w-100">Mark as Served</button>
+                  <div class="countdown-timer text-center mb-2" id="countdown_${safeTicketId}">Loading...</div>
+                  <button onclick="triggerAction('reservation', '${safeTicketId}', null, 'Mark this advance order as served to the table?')" class="btn-done w-100">Mark as Served</button>
                 </div>
               </div>
             `;

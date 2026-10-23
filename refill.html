@@ -224,10 +224,21 @@
 
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <script type="module">
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         import { db, ref, get, push, onValue } from "./js/firebase-config.js";
 
         let myStartTime = Date.now();
         let diningInterval = null;
+        let diningLimitExpired = false;
         function startDiningTimer(startTime) {
             if (diningInterval) clearInterval(diningInterval);
             const badge = document.getElementById("diningTimerBadge");
@@ -241,8 +252,14 @@
                 const remainingMs = limitMs - elapsedMs;
 
                 if (remainingMs <= 0) {
+                    diningLimitExpired = true;
                     badge.className = "badge bg-danger px-2 py-1 fw-bold";
                     textEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i> Session Ended`;
+                    const btn = document.getElementById('submitRefillBtn');
+                    if (btn) {
+                        btn.disabled = true;
+                        btn.innerHTML = '<i class="fa-solid fa-ban me-2"></i> 2-Hour Limit Reached';
+                    }
                     return;
                 }
 
@@ -507,6 +524,10 @@
         };
 
         document.getElementById('submitRefillBtn').addEventListener('click', async () => {
+            if (diningLimitExpired) {
+                return showToast("Your 2-hour dining session has ended. Further refills cannot be requested.", false);
+            }
+
             let itemsString = "";
             let totalItemsCount = 0;
 
@@ -528,6 +549,7 @@
             try {
                 await push(ref(db, 'refills'), {
                     tableNum: myTableNum,
+                    sessionCode: myCurrentCode,
                     items: itemsString,
                     status: 'preparing',
                     timestamp: Date.now()
@@ -557,7 +579,11 @@
                 if (snapshot.exists()) {
                     snapshot.forEach(child => {
                         let data = child.val();
-                        if (data.tableNum === myTableNum && (data.status === 'preparing' || data.status === 'serving')) {
+                        // Session isolation: must belong to current sessionCode (or legacy ticket within 2h)
+                        const isCurrentSession = data.sessionCode 
+                            ? (data.sessionCode === myCurrentCode)
+                            : (data.timestamp && (Date.now() - data.timestamp < 2 * 60 * 60 * 1000));
+                        if (data.tableNum === myTableNum && isCurrentSession && (data.status === 'preparing' || data.status === 'serving')) {
                             hasActive = true;
                             currentStatus = data.status;
                             currentItems = data.items;
@@ -574,7 +600,7 @@
                     floatingBottom.classList.add('d-none');
                     statusArea.classList.remove('d-none');
                     
-                    document.getElementById('currentRefillItems').innerHTML = currentItems.replace(/, /g, '<br>');
+                    document.getElementById('currentRefillItems').innerHTML = escapeHtml(currentItems).replace(/,\s*/g, '<br>');
 
                     if (currentStatus === 'preparing') {
                         document.getElementById('statusIcon').innerHTML = '<i class="fa-solid fa-fire-burner fa-4x text-warning"></i>';

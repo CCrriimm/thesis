@@ -56,7 +56,7 @@
   </head>
   <body>
     <video width="100%" height="100%" id="ChickenBG" autoplay loop muted>
-      <source src="Media/ChickenBG.mp4" type="video/mp4" />
+      <source src="Media/ChickenBG2.mp4" type="video/mp4" />
     </video>
 
     <div class="card register-card shadow-lg border-0">
@@ -127,7 +127,7 @@
 
             <div id="passwordRequirements" class="mt-2 small">
               <div id="req-length" class="text-danger">
-                <i class="fa-solid fa-circle-xmark"></i> 6-12 characters
+                <i class="fa-solid fa-circle-xmark"></i> At least 6 characters
               </div>
               <div id="req-uppercase" class="text-danger">
                 <i class="fa-solid fa-circle-xmark"></i> At least one uppercase letter
@@ -393,7 +393,6 @@
         createUserWithEmailAndPassword,
         signInWithEmailAndPassword,
         sendEmailVerification,
-        deleteUser,
         RecaptchaVerifier,
         signInWithPhoneNumber,
         linkWithCredential,
@@ -486,7 +485,7 @@
       pass1.addEventListener("input", () => {
         const password = pass1.value;
         
-        const lengthValid = password.length >= 6 && password.length <= 12;
+        const lengthValid = password.length >= 6 && password.length <= 128;
         updateRequirement("req-length", lengthValid);
         
         const uppercaseValid = /[A-Z]/.test(password);
@@ -580,8 +579,8 @@
         const p1 = pass1.value;
         const p2 = pass2.value;
 
-        if (p1.length < 6 || p1.length > 12) {
-          showError("Password must be 6-12 characters long!");
+        if (p1.length < 6 || p1.length > 128) {
+          showError("Password must be at least 6 characters long!");
           return;
         }
         if (!/[A-Z]/.test(p1)) {
@@ -630,6 +629,18 @@
           return;
         }
 
+        // Duplicate name verification
+        const cleanNameKey = `${fnameVal.toLowerCase()}_${lnameVal.toLowerCase()}`.replace(/[\.\#\$\[\]\/]/g, "_");
+        try {
+          const nameSnap = await get(ref(db, `takenNames/${cleanNameKey}`));
+          if (nameSnap.exists() && nameSnap.val() === true) {
+            showError(`An account with the name "${fnameVal} ${lnameVal}" already exists. Please use a distinct name.`);
+            return;
+          }
+        } catch (nameErr) {
+          console.warn("Name check note:", nameErr);
+        }
+
         const signupBtn = document.getElementById("signupBtn");
 
         const verifyMethod = document.querySelector('input[name="verifyMethod"]:checked')?.value || "email";
@@ -653,43 +664,10 @@
               activeUser = userCredential.user;
             } catch (createErr) {
               if (createErr.code === "auth/email-already-in-use") {
-                // Check if this email is an actual active registered user in Realtime Database
-                let isAlreadyInDb = false;
-                try {
-                  const usersSnap = await get(ref(db, "users"));
-                  if (usersSnap.exists()) {
-                    const allUsers = usersSnap.val();
-                    for (const uid in allUsers) {
-                      if (allUsers[uid]?.email && allUsers[uid].email.toLowerCase() === emailVal.toLowerCase()) {
-                        isAlreadyInDb = true;
-                        break;
-                      }
-                    }
-                  }
-                } catch (e) {
-                  console.warn("DB check error:", e);
-                }
-
-                if (isAlreadyInDb) {
-                  signupBtn.innerHTML = "VERIFY & REGISTER";
-                  signupBtn.disabled = false;
-                  showError("This email address is already registered to an active account. Please log in.");
-                  return;
-                }
-
-                // If NOT in the database, this was an abandoned incomplete registration!
-                // Sign in with the entered password, delete the unverified orphan, and re-create fresh!
-                try {
-                  const orphanCred = await signInWithEmailAndPassword(auth, emailVal, p1);
-                  await deleteUser(orphanCred.user);
-                  const freshCred = await createUserWithEmailAndPassword(auth, emailVal, p1);
-                  activeUser = freshCred.user;
-                } catch (orphanErr) {
-                  signupBtn.innerHTML = "VERIFY & REGISTER";
-                  signupBtn.disabled = false;
-                  showError("An unverified registration attempt with this email already exists. Please log in with your previous password or reset password.");
-                  return;
-                }
+                signupBtn.innerHTML = "VERIFY & REGISTER";
+                signupBtn.disabled = false;
+                showError("This email address is already registered. Please log in or reset your password.");
+                return;
               } else {
                 throw createErr;
               }
@@ -872,6 +850,10 @@
             createdAt: Date.now()
           });
 
+          // 3. Register taken name key
+          const cleanKey = `${pendingRegistration.fname.toLowerCase()}_${pendingRegistration.lname.toLowerCase()}`.replace(/[\.\#\$\[\]\/]/g, "_");
+          await set(ref(db, `takenNames/${cleanKey}`), true).catch(() => {});
+
           // 3. Cache user session
           if (window.cacheUserSession) {
             window.cacheUserSession(user, {
@@ -961,11 +943,10 @@
 
         try {
           if (auth.currentUser) {
-            await deleteUser(auth.currentUser);
+            await signOut(auth);
           }
         } catch (err) {
-          console.warn("Could not delete unverified user on cancel:", err);
-          try { await signOut(auth); } catch (e) {}
+          console.warn("Sign out on cancel error:", err);
         }
 
         pendingRegistration = null;
@@ -1032,6 +1013,10 @@
             emailVerified: false,
             createdAt: Date.now()
           });
+
+          // 5. Register taken name key
+          const phoneCleanKey = `${pendingRegistration.fname.toLowerCase()}_${pendingRegistration.lname.toLowerCase()}`.replace(/[\.\#\$\[\]\/]/g, "_");
+          await set(ref(db, `takenNames/${phoneCleanKey}`), true).catch(() => {});
 
           if (window.cacheUserSession) {
             window.cacheUserSession(user, {

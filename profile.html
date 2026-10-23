@@ -187,6 +187,7 @@
           </div>
           <div class="modal-body p-4 bg-light">
             <p class="text-muted small mb-3">Please let us know why you are cancelling. This helps us improve our service.</p>
+            <div id="customerCancelWarningAlert" class="alert alert-warning d-none py-2 px-3 small fw-bold mb-3"></div>
             <div id="customerCancelErrorAlert" class="alert alert-danger d-none py-2 px-3 small fw-bold mb-3"></div>
 
             <label class="form-label fw-bold small text-dark">Reason for Cancellation:</label>
@@ -244,13 +245,44 @@
       </div>
     </div>
 
+    <!-- System Feedback Toast -->
+    <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 9999; width: 100%; max-width: 400px;">
+        <div id="systemToast" class="toast align-items-center text-white border-0 w-100" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-bold fs-6" id="toastMessage"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
     <script type="module">
         // Added 'update' and 'remove' to the imports for profile and cancellation features
         import { auth, db, ref, get, update, remove, onValue, onAuthStateChanged, signOut } from "./js/firebase-config.js";
+        import { cancelReservationRecord, isLateCancellation, LATE_CANCEL_MINUTES } from "./js/reservation-utils.js";
+
+        let systemToastInstance = null;
+        function showToast(message, isSuccess = true) {
+            const toastEl = document.getElementById("systemToast");
+            const msgEl = document.getElementById("toastMessage");
+            if (!toastEl || !msgEl) return;
+            msgEl.innerText = message;
+            if (isSuccess) {
+                toastEl.classList.remove("bg-danger");
+                toastEl.classList.add("bg-success");
+            } else {
+                toastEl.classList.remove("bg-success");
+                toastEl.classList.add("bg-danger");
+            }
+            if (!systemToastInstance && window.bootstrap) {
+                systemToastInstance = new bootstrap.Toast(toastEl, { delay: 3500 });
+            }
+            if (systemToastInstance) systemToastInstance.show();
+        }
 
         let currentUserUid = "";
         let currentUserName = "";
+        let cachedReservations = [];
         
         // Data states for masking/unmasking
         let rawData = { email: "", phone: "", firstName: "", lastName: "" };
@@ -633,7 +665,7 @@
                 if (ord) {
                     const check = checkOrderCancelEligibility(ord);
                     if (!check.canCancel) {
-                        alert(check.reason || "This order cannot be cancelled because it is within 20 minutes of pickup time.");
+                        showToast(check.reason || "This order cannot be cancelled because it is within 20 minutes of pickup time.", false);
                         return;
                     }
                 }
@@ -650,6 +682,23 @@
                 modalTitle.innerHTML = type === 'reservation' 
                     ? `<i class="fa-solid fa-triangle-exclamation me-2"></i> Cancel Reservation`
                     : `<i class="fa-solid fa-triangle-exclamation me-2"></i> Cancel Pickup Order`;
+            }
+
+            // Warning for late cancellation on approved reservations
+            const warnEl = document.getElementById('customerCancelWarningAlert');
+            if (warnEl) {
+                if (type === 'reservation') {
+                    const targetRes = cachedReservations.find(r => r.id === id);
+                    const isLate = targetRes && targetRes.status === 'approved' && isLateCancellation(date, time, LATE_CANCEL_MINUTES);
+                    if (isLate) {
+                        warnEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> <b>Notice:</b> This cancellation is within 2 hours of your reservation slot. Your downpayment will be forfeited and this table slot remains held.';
+                        warnEl.classList.remove('d-none');
+                    } else {
+                        warnEl.classList.add('d-none');
+                    }
+                } else {
+                    warnEl.classList.add('d-none');
+                }
             }
 
             const r1 = document.getElementById('ccReason1');
@@ -691,46 +740,31 @@
 
             try {
                 if (pendingCancelType === 'reservation') {
-                    await update(ref(db, `reservations/${pendingCancelId}`), {
-                        status: 'cancelled',
-                        rejectionReason: finalReason,
-                        cancellationReason: finalReason,
+                    const targetRes = cachedReservations.find(r => r.id === pendingCancelId) || {
+                        date: pendingCancelDate,
+                        time: pendingCancelTime,
+                        tableSize: pendingCancelTable,
+                        status: 'pending'
+                    };
+
+                    const result = await cancelReservationRecord({
+                        db,
+                        resId: pendingCancelId,
+                        resData: targetRes,
                         cancelledBy: 'customer',
-                        cancelledAt: Date.now()
+                        reason: finalReason,
+                        update,
+                        remove,
+                        ref
                     });
 
-                    if (pendingCancelDate && pendingCancelTime && pendingCancelTable) {
-                        const tableMatch = pendingCancelTable.match(/Table (\d+)/i);
-                        if (tableMatch) {
-                            const tableId = "table_" + tableMatch[1];
-                            try {
-                                await remove(ref(db, `reservationSlots/${pendingCancelDate}/${pendingCancelTime}/tables/${tableId}`));
-                            } catch (slotErr) {
-                                console.warn("Could not remove slot:", slotErr);
-                            }
-                        }
+                    if (customerCancelModalInstance) customerCancelModalInstance.hide();
+                    if (result.isLate) {
+                        showToast("Reservation cancelled. Downpayment forfeited per 2-hour policy.", true);
+                    } else {
+                        showToast("Reservation cancelled successfully.", true);
                     }
-
-                    // Cancel linked payment in payments node
-                    try {
-                        const paySnap = await get(ref(db, 'payments'));
-                        if (paySnap.exists()) {
-                            paySnap.forEach((child) => {
-                                const pData = child.val();
-                                if (child.key === pendingCancelId || pData.reservationId === pendingCancelId) {
-                                    update(ref(db, `payments/${child.key}`), {
-                                        status: 'cancelled',
-                                        rejectionReason: finalReason,
-                                        cancellationReason: finalReason,
-                                        cancelledBy: 'customer',
-                                        cancelledAt: Date.now()
-                                    });
-                                }
-                            });
-                        }
-                    } catch (pErr) {
-                        console.warn("Could not sync payment cancellation:", pErr);
-                    }
+                    return;
                 } else if (pendingCancelType === 'order') {
                     const ord = cachedOrders.find(o => o.id === pendingCancelId);
                     if (ord) {
@@ -818,6 +852,7 @@
                     }
 
                     myRes.sort((a,b) => parseResTimestamp(b) - parseResTimestamp(a));
+                    cachedReservations = myRes;
 
                     myRes.forEach(r => {
                         hasData = true;
@@ -850,7 +885,7 @@
                         }
 
                         let cancelBtn = "";
-                        if (r.status === "pending") {
+                        if (r.status === "pending" || r.status === "approved") {
                             const safeTableSize = (r.tableSize || "").replace(/'/g, "\\'");
                             cancelBtn = `
                                 <div class="mt-2 pt-2 border-top d-flex justify-content-end">
@@ -916,6 +951,7 @@
                         else if (o.status === "preparing") badge = `<span class="status-badge bg-info text-dark"><i class="fa-solid fa-fire-burner me-1"></i> Kitchen is Preparing</span>`;
                         else if (o.status === "done") badge = `<span class="status-badge bg-success text-white"><i class="fa-solid fa-bag-shopping me-1"></i> Ready for Pickup!</span>`;
                         else if (o.status === "claimed") badge = `<span class="status-badge bg-secondary text-white"><i class="fa-solid fa-check-double me-1"></i> Completed & Claimed</span>`;
+                        else if (o.status === "forfeited") badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-user-xmark me-1"></i> Forfeited (No-Show)</span>`;
                         else if (o.status === "cancelled") badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i> Cancelled</span>`;
                         else badge = `<span class="status-badge bg-danger text-white"><i class="fa-solid fa-xmark me-1"></i> Rejected</span>`;
 
@@ -996,13 +1032,18 @@
 
         // 5. LOGOUT
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-            try {
-                sessionStorage.clear();
-                await signOut(auth);
-            } catch (err) {
-                console.warn("Sign out error:", err);
+            if (window.handleCustomerLogout) {
+                await window.handleCustomerLogout();
+            } else {
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                try {
+                    await signOut(auth);
+                } catch (err) {
+                    console.warn("Sign out error:", err);
+                }
+                window.location.replace("login.html");
             }
-            window.location.replace("login.html");
         });
     </script>
 </body>

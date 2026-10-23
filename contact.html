@@ -286,7 +286,7 @@
   <!-- Hero Header -->
   <header class="contact-hero text-center">
       <video autoplay muted loop playsinline class="hero-bg-video">
-          <source src="Media/ChickenBG.mp4" type="video/mp4">
+          <source src="Media/ChickenBG2.mp4" type="video/mp4">
       </video>
       <div class="hero-overlay"></div>
       <div class="hero-content container">
@@ -376,6 +376,7 @@
                               <textarea id="senderMessage" class="form-control" rows="5" placeholder="How can we help you today?" required></textarea>
                           </div>
 
+                          <div id="contactFormError" class="alert alert-danger py-2 px-3 small d-none mb-3"></div>
                           <button type="submit" id="sendBtn" class="btn btn-orange w-100 py-3 fs-5 shadow-sm">
                               <i class="fa-solid fa-paper-plane me-2"></i> Submit Message
                           </button>
@@ -475,10 +476,12 @@
           }
       } catch (e) {}
 
-      // Global logout function
+      // Global logout function (wipes both sessionStorage and localStorage)
       window.handleCustomerLogout = async function() {
+          if (window.clearUserSession) window.clearUserSession();
+          sessionStorage.clear();
+          localStorage.clear();
           try {
-              sessionStorage.clear();
               await signOut(auth);
           } catch (err) {
               console.warn("Sign out error:", err);
@@ -688,6 +691,9 @@
               read: false
           };
 
+          const errBox = document.getElementById("contactFormError");
+          if (errBox) errBox.classList.add("d-none");
+
           try {
               await push(ref(db, "inquiries"), inquiryData);
               if (currentUser) {
@@ -698,15 +704,11 @@
               }
               messageSentModal.show();
           } catch (error) {
-              console.warn("Realtime DB write info:", error);
-              // Show confirmation to user even if offline/fallback
-              if (currentUser) {
-                  document.getElementById("senderTopic").selectedIndex = 0;
-                  document.getElementById("senderMessage").value = "";
-              } else {
-                  document.getElementById("contactForm").reset();
+              console.error("Inquiry submit error:", error);
+              if (errBox) {
+                  errBox.textContent = "Unable to send message. Please check your connection and try again.";
+                  errBox.classList.remove("d-none");
               }
-              messageSentModal.show();
           } finally {
               btn.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i> Submit Message';
               btn.disabled = false;

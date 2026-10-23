@@ -63,7 +63,7 @@
       muted
       style="border-radius: 10px"
     >
-      <source src="Media/ChickenBG.mp4" type="video/mp4" />
+      <source src="Media/ChickenBG2.mp4" type="video/mp4" />
     </video>
     <!-- Session Checking Card (Visible by default while checking auth state) -->
     <div id="sessionCheckCard" class="card login-card shadow-lg border-0 text-center p-4">
@@ -157,6 +157,8 @@
           const cachedRole = sessionStorage.getItem("toms_user_role");
           if (cachedRole === "admin") {
             window.location.replace("admin.html");
+          } else if (cachedRole === "chef") {
+            window.location.replace("kitchen.html");
           } else {
             window.location.replace("index.html");
           }
@@ -252,6 +254,19 @@
                 await signOut(auth);
                 showLoginForm();
                 showError("Access Denied: Your admin account has been deactivated.");
+                return;
+              }
+            } else if (userData.role === "chef") {
+              if (userData.status === "active") {
+                window.location.replace("kitchen.html");
+                return;
+              } else {
+                isRedirecting = false;
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                await signOut(auth);
+                showLoginForm();
+                showError("Access Denied: Your chef account has been deactivated.");
                 return;
               }
             } else if (userData.role === "customer") {
@@ -379,6 +394,17 @@
                 await signOut(auth);
                 showError(
                   "Access Denied: Your admin account has been deactivated.",
+                );
+              }
+            } else if (userData.role === "chef") {
+              if (userData.status === "active") {
+                window.location.replace("kitchen.html");
+              } else {
+                if (window.clearUserSession) window.clearUserSession();
+                else sessionStorage.clear();
+                await signOut(auth);
+                showError(
+                  "Access Denied: Your chef account has been deactivated.",
                 );
               }
             } else if (userData.role === "customer") {

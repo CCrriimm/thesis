@@ -274,6 +274,16 @@
     </div>
 
     <script type="module">
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
       import { auth, db, ref, get, onAuthStateChanged, onValue, update, remove, signOut } from "./js/firebase-config.js";
 
       let receiptModalInstance = null;
@@ -631,13 +641,13 @@
           }
 
           const optBadge = option 
-            ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-2" style="font-size: 0.72rem; font-weight: 600;"><i class="fa-solid fa-tag me-1 text-warning"></i>${option}</span>` 
+            ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-2" style="font-size: 0.72rem; font-weight: 600;"><i class="fa-solid fa-tag me-1 text-warning"></i>${escapeHtml(option)}</span>` 
             : "";
 
           html += `
             <div class="d-flex align-items-center p-2 rounded-3 bg-white border shadow-sm text-start">
-              <span class="badge bg-dark text-white fw-bold me-2 px-2 py-1" style="font-size: 0.8rem; letter-spacing: 0.5px;">${qty}</span>
-              <span class="fw-bold text-dark text-truncate" style="font-size: 0.88rem;">${name}</span>
+              <span class="badge bg-dark text-white fw-bold me-2 px-2 py-1" style="font-size: 0.8rem; letter-spacing: 0.5px;">${escapeHtml(qty)}</span>
+              <span class="fw-bold text-dark text-truncate" style="font-size: 0.88rem;">${escapeHtml(name)}</span>
               ${optBadge}
             </div>
           `;
@@ -685,7 +695,14 @@
           let reasonSnippet = "";
           if ((p.status === "cancelled" || p.status === "rejected") && (p.rejectionReason || p.cancellationReason)) {
             const label = p.status === "cancelled" ? (p.cancelledBy === "customer" ? "Customer: " : "Admin: ") : "Reason: ";
-            reasonSnippet = `<br><small class="text-danger fw-bold" style="font-size:0.75rem;"><i class="fa-solid fa-circle-exclamation me-1"></i>${label}${p.rejectionReason || p.cancellationReason}</small>`;
+            reasonSnippet = `<br><small class="text-danger fw-bold" style="font-size:0.75rem;"><i class="fa-solid fa-circle-exclamation me-1"></i>${label}${escapeHtml(p.rejectionReason || p.cancellationReason)}</small>`;
+          }
+
+          let refundBadge = "";
+          if (p.refundStatus === "forfeited") {
+            refundBadge = '<br><span class="badge bg-danger" style="font-size:0.7rem;"><i class="fa-solid fa-lock me-1"></i>Downpayment Forfeited</span>';
+          } else if (p.refundStatus === "refund_needed") {
+            refundBadge = '<br><span class="badge bg-warning text-dark" style="font-size:0.7rem;"><i class="fa-solid fa-rotate-left me-1"></i>Refund Needed</span>';
           }
 
           let catBadge = "";
@@ -701,12 +718,12 @@
           
           tbody.innerHTML += `
             <tr>
-              <td class="text-muted fw-bold">#${p.id.substring(1, 6).toUpperCase()}</td>
-              <td class="fw-bold">${p.customerName || "Customer"}</td>
+              <td class="text-muted fw-bold">#${escapeHtml(p.id.substring(1, 6).toUpperCase())}</td>
+              <td class="fw-bold">${escapeHtml(p.customerName || "Customer")}</td>
               <td>${catBadge}</td>
               <td><small class="fw-bold">${p.formattedDate}</small><br><small class="text-muted">${p.formattedTime}</small></td>
               <td class="fw-bold text-success">₱${p.amount}</td>
-              <td>${statusBadge}${reasonSnippet}</td>
+              <td>${statusBadge}${refundBadge}${reasonSnippet}</td>
               <td>${actionBtn}</td>
             </tr>
           `;
@@ -796,6 +813,9 @@
           reasonWrap.classList.add("d-none");
         }
 
+        const approveBtn = document.getElementById("approveBtn");
+        if (approveBtn) approveBtn.disabled = false;
+
         if (isHistory || p.status === "cancelled" || p.status === "rejected") {
           document.getElementById("modalActions").classList.add("d-none");
         } else {
@@ -823,6 +843,33 @@
 
       // APPROVE BUTTON - Updates order status to 'preparing' so kitchen can see it
       document.getElementById("approveBtn").addEventListener("click", async () => {
+        const reasonWrap = document.getElementById("modalReasonWrap");
+        const reasonText = document.getElementById("modalReasonText");
+        const approveBtn = document.getElementById("approveBtn");
+
+        // Re-check linked reservation or order to prevent approving cancelled requests
+        if (currentResId && currentResId !== "") {
+          const resSnap = await get(ref(db, "reservations/" + currentResId));
+          if (resSnap.exists() && resSnap.val().status === "cancelled") {
+            if (reasonWrap && reasonText) {
+              reasonText.innerText = "Cannot approve: This reservation was already cancelled by the customer.";
+              reasonWrap.classList.remove("d-none");
+            }
+            if (approveBtn) approveBtn.disabled = true;
+            return;
+          }
+        } else if (currentOrderId && currentOrderId !== "") {
+          const ordSnap = await get(ref(db, "orders/" + currentOrderId));
+          if (ordSnap.exists() && ordSnap.val().status === "cancelled") {
+            if (reasonWrap && reasonText) {
+              reasonText.innerText = "Cannot approve: This order was already cancelled by the customer.";
+              reasonWrap.classList.remove("d-none");
+            }
+            if (approveBtn) approveBtn.disabled = true;
+            return;
+          }
+        }
+
         await update(ref(db, "payments/" + currentPaymentId), { status: "approved" });
 
         if (currentResId && currentResId !== "") {

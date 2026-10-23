@@ -970,6 +970,8 @@
         get,
         push,
         set,
+        remove,
+        runTransaction,
         onValue,
         onAuthStateChanged,
         storage,
@@ -2062,39 +2064,73 @@
             await uploadBytes(sRef, fileInput);
             const receiptUrl = await getDownloadURL(sRef);
 
-            const newResRef = push(ref(db, "reservations"));
-            const resId = newResRef.key;
             const selectedDate = document.getElementById("resDate").value;
             const selectedTime = document.getElementById("resTime").value;
-
             const tableMatch = document.getElementById("resTableSize").value.match(/Table (\d+)/);
-            const tableId = tableMatch[1];
+            const tableId = tableMatch ? tableMatch[1] : "1";
 
-            await set(ref(db, `reservationSlots/${selectedDate}/${selectedTime}/tables/${tableId}`), true);
-
-            await set(newResRef, {
-                name: currentUserName,
-                date: selectedDate,
-                time: selectedTime,
-                pax: document.getElementById("resPax").value,
-                tableSize: document.getElementById("resTableSize").value,
-                notes: compiledNotes,
-                receiptUrl: receiptUrl,
-                type: "online",
-                status: "pending",
+            // Atomic slot claim using runTransaction to eliminate race condition double-bookings
+            const slotRef = ref(db, `reservationSlots/${selectedDate}/${selectedTime}/tables/${tableId}`);
+            let slotClaimed = false;
+            const txnResult = await runTransaction(slotRef, (currentVal) => {
+                if (currentVal === true) {
+                    return; // Abort transaction if already claimed!
+                }
+                return true;
             });
 
-            const reservationItems = compiledNotes ? compiledNotes.replace("[ADVANCE ORDER]", "Advance Order:").trim() : "Table Reservation (No advance food)";
-            await push(ref(db, "payments"), {
-                customerName: currentUserName,
-                amount: finalPaymentAmount.toFixed(2),
-                category: "Online Reservation",
-                items: reservationItems,
-                timestamp: Date.now(),
-                status: "pending",
-                receiptUrl: receiptUrl, // Saving the real Storage URL
-                reservationId: resId,
-            });
+            if (!txnResult.committed) {
+                throw new Error(`Table ${tableId} was just taken by another customer for this time slot. Please choose another table or time.`);
+            }
+            slotClaimed = true;
+
+            const user = auth.currentUser;
+            const userId = user ? user.uid : (sessionStorage.getItem("toms_user_uid") || null);
+            const userEmail = user ? user.email : (sessionStorage.getItem("toms_user_email") || null);
+
+            const newResRef = push(ref(db, "reservations"));
+            const resId = newResRef.key;
+            const paymentKey = push(ref(db, "payments")).key;
+
+            try {
+                await set(newResRef, {
+                    userId: userId,
+                    customerEmail: userEmail,
+                    name: currentUserName,
+                    date: selectedDate,
+                    time: selectedTime,
+                    tableId: tableId,
+                    tableSize: document.getElementById("resTableSize").value,
+                    pax: document.getElementById("resPax").value,
+                    notes: compiledNotes,
+                    receiptUrl: receiptUrl,
+                    type: "online",
+                    status: "pending",
+                    paymentId: paymentKey,
+                    timestamp: Date.now()
+                });
+
+                const reservationItems = compiledNotes ? compiledNotes.replace("[ADVANCE ORDER]", "Advance Order:").trim() : "Table Reservation (No advance food)";
+                await set(ref(db, `payments/${paymentKey}`), {
+                    userId: userId,
+                    customerEmail: userEmail,
+                    customerName: currentUserName,
+                    amount: finalPaymentAmount.toFixed(2),
+                    category: "Online Reservation",
+                    items: reservationItems,
+                    timestamp: Date.now(),
+                    status: "pending",
+                    receiptUrl: receiptUrl,
+                    reservationId: resId,
+                    tableId: tableId
+                });
+            } catch (writeErr) {
+                // If writing details failed after slot claim, roll back slot claim
+                if (slotClaimed) {
+                    try { await remove(slotRef); } catch(e){}
+                }
+                throw writeErr;
+            }
 
             bootstrap.Modal.getInstance(document.getElementById("paymentModal")).hide();
             new bootstrap.Modal(document.getElementById("ReservSuccessModal")).show();

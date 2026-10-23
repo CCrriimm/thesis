@@ -329,13 +329,27 @@
 
     <script src="Bootstrap/Scripts/bootstrap.bundle.min.js"></script>
       <script type="module">
-      import { auth, db, ref, get, onValue, push, onAuthStateChanged, storage, storageRef, uploadBytes, getDownloadURL } from "./js/firebase-config.js";
+      import { auth, db, ref, get, set, onValue, push, onAuthStateChanged, storage, storageRef, uploadBytes, getDownloadURL } from "./js/firebase-config.js";
 
       let currentUserName = "Unknown Customer";
       let currentMenuData = {}; 
       
+      function getCartStorageKey() {
+          const uid = auth.currentUser ? auth.currentUser.uid : (sessionStorage.getItem("toms_user_uid") || "guest");
+          return `tomsCart_${uid}`;
+      }
+
+      function loadCart() {
+          try {
+              const raw = localStorage.getItem(getCartStorageKey()) || localStorage.getItem('tomsCart');
+              return raw ? JSON.parse(raw) : {};
+          } catch (e) {
+              return {};
+          }
+      }
+
       // LOAD CART FROM LOCAL STORAGE (or initialize empty)
-      let cart = JSON.parse(localStorage.getItem('tomsCart')) || {}; 
+      let cart = loadCart(); 
 
       // Update UI immediately on load in case there are saved items
       document.addEventListener("DOMContentLoaded", () => {
@@ -362,6 +376,8 @@
               window.cacheUserSession(user, val);
             }
             currentUserName = `${val.firstName} ${val.lastName}`;
+            cart = loadCart();
+            updateCartUI();
           }
         } catch (e) {
           console.error("Auth check error:", e);
@@ -516,7 +532,7 @@
 
       // Save Cart Helper Function
       function saveCart() {
-          localStorage.setItem('tomsCart', JSON.stringify(cart));
+          localStorage.setItem(getCartStorageKey(), JSON.stringify(cart));
       }
 
       // Quantity Selection Modal Logic
@@ -1027,17 +1043,30 @@
           await uploadBytes(sRef, fileInput);
           const receiptUrl = await getDownloadURL(sRef);
 
-          const orderRef = await push(ref(db, "orders"), {
+          const user = auth.currentUser;
+          const userId = user ? user.uid : (sessionStorage.getItem("toms_user_uid") || null);
+          const userEmail = user ? user.email : (sessionStorage.getItem("toms_user_email") || null);
+
+          const orderRef = push(ref(db, "orders"));
+          const orderKey = orderRef.key;
+          const paymentKey = push(ref(db, "payments")).key;
+
+          await set(orderRef, {
+            userId: userId,
+            customerEmail: userEmail,
             customerName: currentUserName,
             items: cleanOrderSummary,
             total: totalPrice,
             pickupTime: formattedPickup,
             rawPickupTime: rawPickupTime,
             status: "pending",
+            paymentId: paymentKey,
             timestamp: Date.now(),
           });
 
-          await push(ref(db, "payments"), {
+          await set(ref(db, `payments/${paymentKey}`), {
+            userId: userId,
+            customerEmail: userEmail,
             customerName: currentUserName,
             amount: totalPrice,
             category: "Online Order",
@@ -1045,7 +1074,7 @@
             timestamp: Date.now(),
             status: "pending",
             receiptUrl: receiptUrl,
-            orderId: orderRef.key,
+            orderId: orderKey,
           });
 
           // CLEAR CART ON SUCCESSFUL ORDER
